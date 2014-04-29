@@ -1,24 +1,36 @@
-function tau = tau_analytic_public(latin,presin,tautin,taupsin,taupnin,lbroad,days,filename)
-%written by Martin Jucker
-%taut is the value for tau at the equator and 100hPa
-%taups is the value for tau at the south pole and 100hPa
-%taupn is the value for tau at the north pole and 100hPa
-%lbroad is the width of the tropical gaussian
-%days gives the days of the year, must have same size as
-%tautin,taupsin,taupnin
-%filename, if present, is the name of the file containing final tau
+function tau = tau_analytic(lat,pres,days,taut,taups,taupn,lbroad,tauhs,p_hsin,p_bdin,filename)
+% lat: latitude for output grid [deg]
+% pres: pressure for output grid [hPa]
+% days: Days of the year for which Te should be computed []. Standard: Mid-month for each month
+% taut: value for tau at the equator and 100hPa; [d], length of days. Good:
+%   40
+% taups: value for tau at the south pole and 100hPa; [d], length of days.
+%   Good: 20
+% taupn: value for tau at the north pole and 100hPa; [d], length of days.
+%   Good: 20
+% lbroad: width of the tropical Gaussian at 100hPa, [degrees]. Good: 30
+% tauhs: value for tau in the troposphere [d]. Good & standard: 40
+% p_hsin: for pressures above p_hsin [hPa, size latin x days], Held-Suarez
+%   is used. Standard: 100hPa
+% p_bdin: for pressures below p_bdin [hPa, size latin x days], Tin is used.
+%   standard: 100hPa
+%   for p_bdin < p < p_hsin, linear interpolation between the two
+% filename, if present, is the name of the file containing final tau. When
+%   used as input file, needs to be called tau.nc
+%
+% Routine written by Martin Jucker, please refer to M. Jucker, S.
+% Fueglistaler, and G.K. Vallis (2014): [JGR REFERENCE HERE]
 
 %some constants
-
 p0  = 1e3; %do not change this
 pt = 1e2;
 taumin = 5;
 
-pres=presin(:)';
-lat=latin(:);
-taut=tautin(:);
-taups=taupsin(:);
-taupn=taupnin(:);
+pres=pres(:)';
+lat=lat(:);
+taut=taut(:);
+taups=taups(:);
+taupn=taupn(:);
 SH=find(lat<0);
 NH=find(lat>=0);
 
@@ -45,9 +57,24 @@ taupt(:,SH) = taups*ones(size(lats)) + (taut - taups)*expfun(SH)'; %meridional t
 taupt(:,NH) = taupn*ones(size(latn)) + (taut - taupn)*expfun(NH)'; %meridional tau profile at p=pt
 
 
-tau=zeros(length(lat),length(pres),length(taut));
+taus=zeros(length(lat),length(pres),length(taut));
 for t=1:length(taut)
-    tau(:,:,t) = (taupt(t,:) - taumin)'*polynorm + taumin;
+    taus(:,:,t) = (taupt(t,:) - taumin)'*polynorm + taumin;
+end
+
+%% construct complete tau, including Held-Suarez constant tau
+tau = zeros(size(taus));
+for d=1:length(days)
+    for j=1:length(lat)
+        I=find(pres > p_hsin(j,d));
+        tau(j,I,d) = tauhs;
+        II=find(pres <= p_hsin(j,d) & pres > p_bdin(j,d));
+        beta = (pres(II)-p_hsin(j,d))/(p_bdin(j,d)-p_hsin(j,d));
+        tau(j,II,d) = beta.*taus(j,II,d) + (1-beta)*tauhs;
+        III=find(pres <= p_bdin(j,d));
+        tau(j,III,d) = taus(j,III,d);
+    end
+    
 end
 
 
@@ -76,19 +103,19 @@ if ( exist('filename','var'))
     phalf(end) = 1e3;
     
     
-    tdamp = zeros(length(lon),length(lat),length(pres),length(tautin));
+    tdamp = zeros(length(lon),length(lat),length(pres),length(days));
     for l=1:length(lon)
         tdamp(l,:,:,:)=tau;
     end
     
     ncid = netcdf.create(filename,'64BIT_OFFSET');
     % define dimensions and variables
-    lond_id = netcdf.defDim(ncid,'lon',size(lon));
-    lonbd_id= netcdf.defDim(ncid,'lonb',size(lonb));
-    latd_id = netcdf.defDim(ncid,'lat',size(lat));
-    latbd_id= netcdf.defDim(ncid,'latb',size(latb));
-    pd_id   = netcdf.defDim(ncid,'pfull',size(pres'));
-    phd_id  = netcdf.defDim(ncid,'phalf',size(phalf));
+    lond_id = netcdf.defDim(ncid,'lon',length(lon));
+    lonbd_id= netcdf.defDim(ncid,'lonb',length(lonb));
+    latd_id = netcdf.defDim(ncid,'lat',length(lat));
+    latbd_id= netcdf.defDim(ncid,'latb',length(latb));
+    pd_id   = netcdf.defDim(ncid,'pfull',length(pres'));
+    phd_id  = netcdf.defDim(ncid,'phalf',length(phalf));
     td_id  =  netcdf.defDim(ncid,'time',netcdf.getConstant('NC_UNLIMITED'));
     
     lon_id  = netcdf.defVar(ncid,'lon','double',lond_id);
