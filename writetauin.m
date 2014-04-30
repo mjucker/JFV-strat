@@ -1,5 +1,26 @@
-function writetauin(latin,pin,days,tauin,p_hsin,p_bdin,tau_strat,filename,directory)
-% input tauin in days, tau_strat in days
+function writetauin(latin,pin,days,tauin,tau_strat,p_hsin,p_bdin,filename,directory)
+% writes given 3D (latitude x pressure x time) relaxation time profile into
+% netCDF format to be used as input to the FMS Newtonian cooling model
+%
+% latin: latitudes [degrees] of the grid points
+% pin:  pressure levels [hPa] of the grid points
+% days: Days of the year for which Te should be computed []. Standard: Mid-month for each month
+% tauin: Relaxation time profiles on latin x pin x days grid
+% Held-Suarez:
+% tau_strat: maximum tau for Held-Suarez (1994) tropospheric tau [days]. Good value: 40
+% p_hsin: for pressures above p_hsin [hPa, size latin x days], Held-Suarez
+%   is used. Standard: 100hPa
+% p_bdin: for pressures below p_bdin [hPa, size latin x days], Tin is used.
+%   standard: 100hPa
+%   for p_bdin < p < p_hsin, linear interpolation between the two
+% GENERAL:
+% filename: Output file name. As code input, must be called [dir]/tau.nc
+% directory: directory containing file 'atmos_average.nc' to read FMS
+%   dimensions from. If empty, use default T42 grid
+%
+% Routine written by Martin Jucker, please make reference to M. Jucker, S.
+% Fueglistaler, and G.K. Vallis (2013): "Maintenance of the Stratospheric Structure in an
+%   Idealized General Circulation Model", J. Atmos. Sci. 70, 3341. DOI: 10.1175/JAS-D-12-0305.1
 
 grav = 9.81;
 Rd   = 287.04;

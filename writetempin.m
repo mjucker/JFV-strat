@@ -19,8 +19,9 @@ function writetempin(latin,pin,days,Tin,T_strat,epsS,epsN,p_hsin,p_bdin,filename
 % directory: directory containing file 'atmos_average.nc' to read FMS
 %   dimensions from. If empty, use default T42 grid
 %
-% Routine written by Martin Jucker, please refer to M. Jucker, S.
-% Fueglistaler, and G.K. Vallis (2014): [JGR REFERENCE HERE]
+% Routine written by Martin Jucker, please make reference to M. Jucker, S.
+% Fueglistaler, and G.K. Vallis (2013): "Maintenance of the Stratospheric Structure in an
+%   Idealized General Circulation Model", J. Atmos. Sci. 70, 3341. DOI: 10.1175/JAS-D-12-0305.1
 
 
 %be sure inputs are in the shape we need
