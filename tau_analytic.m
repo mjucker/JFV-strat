@@ -1,4 +1,4 @@
-function tau = tau_analytic(lat,pres,days,taut,taups,taupn,lbroad,tauhs,p_hsin,p_bdin,filename)
+function tau = tau_analytic(lat,pres,days,taut,taups,taupn,lbroad,tau_strat,p_hsin,p_bdin,filename)
 % lat: latitude for output grid [deg]
 % pres: pressure for output grid [hPa]
 % days: Days of the year for which Te should be computed []. Standard: Mid-month for each month
@@ -9,7 +9,7 @@ function tau = tau_analytic(lat,pres,days,taut,taups,taupn,lbroad,tauhs,p_hsin,p
 % taupn: value for tau at the north pole and 100hPa; [d], length of days.
 %   Good: 20
 % lbroad: width of the tropical Gaussian at 100hPa, [degrees]. Good: 30
-% tauhs: value for tau in the troposphere [d]. Good & standard: 40
+% tau_strat: value for tau in the Held-Suarez stratosphere [d]. Good & standard: 40
 % p_hsin: for pressures above p_hsin [hPa, size latin x days], Held-Suarez
 %   is used. Standard: 100hPa
 % p_bdin: for pressures below p_bdin [hPa, size latin x days], Tin is used.
@@ -62,15 +62,30 @@ for t=1:length(taut)
     taus(:,:,t) = (taupt(t,:) - taumin)'*polynorm + taumin;
 end
 
-%% construct complete tau, including Held-Suarez constant tau
+%% compute Held-Suarez tau
+ka=1/tau_strat;
+ks=1/4;
+sigma=pres/p0;
+sigmab=0.7;
+
+kv = (ks-ka)*max(0,(sigma-sigmab)/(1-sigmab));
+
+tauhs=zeros(length(lat),length(pres));
+for k=1:length(pres)
+    kT = ka + kv(k)*cos(lat*pi/180).^4;
+    tauhs(:,k) = 1./kT;
+end
+
+
+%% construct complete tau, including Held-Suarez tau
 tau = zeros(size(taus));
 for d=1:length(days)
     for j=1:length(lat)
         I=find(pres > p_hsin(j,d));
-        tau(j,I,d) = tauhs;
+        tau(j,I,d) = tauhs(j,I);
         II=find(pres <= p_hsin(j,d) & pres > p_bdin(j,d));
         beta = (pres(II)-p_hsin(j,d))/(p_bdin(j,d)-p_hsin(j,d));
-        tau(j,II,d) = beta.*taus(j,II,d) + (1-beta)*tauhs;
+        tau(j,II,d) = beta.*taus(j,II,d) + (1-beta).*tauhs(j,II);
         III=find(pres <= p_bdin(j,d));
         tau(j,III,d) = taus(j,III,d);
     end
