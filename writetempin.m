@@ -27,11 +27,15 @@ function writetempin(latin,pin,days,Tin,T_strat,epsS,epsN,p_hsin,p_bdin,filename
 %be sure inputs are in the shape we need
 if(pin(end)<pin(1))
     pin = pin(end:-1:1);
+    Tin = Tin(:,end:-1:1,:);
+    p_hsin = p_hsin(:,end:-1:1,:);
+    p_bdin = p_bdin(:,end:-1:1,:);
 end
 latin=latin(:);pin=pin(:);
 
 grav = 9.81;
 Rd   = 287.04;
+T_range = [100,400]; 
 
 
 %% read fms dimensions and interpolate Teq onto them
@@ -104,6 +108,43 @@ else
     end
 end
 
+%% add Held-Suarez troposphere
+TeHS=zeros(size(Tin));
+
+T0=315;
+delT=60;
+delv=10;
+p0=1e3;
+kap  = 287.04/1004;
+sigma=pin/p0;
+
+for l=1:length(latin)
+    for d=1:t_length
+        for k=1:length(pin)
+            if(latin(l)<=0)
+                eps=epsS*cos(2*pi*days(d)/365);
+            else
+                eps=epsN*cos(2*pi*days(d)/365);
+            end
+            TeHS(l,k,d)=max(T_strat,(T0 - delT*(sin(latin(l)*pi/180).^2) - eps*sin(latin(l)*pi/180)- delv*log(sigma(k)).*(cos(latin(l)*pi/180).^4)).*(sigma(k)^kap));
+        end
+    end
+end
+
+%% construct complete Te
+Te = zeros(size(Tin));
+for d=1:t_length
+    for j=1:length(latin)
+        I=find(pin > p_hsin(j,d));
+        Te(j,I,d) = TeHS(j,I,d);
+        II=find(pin <= p_hsin(j,d) & pin > p_bdin(j,d));
+        beta = (pin(II)-p_hsin(j,d))/(p_bdin(j,d)-p_hsin(j,d));
+        Te(j,II,d) = beta'.*Tin(j,II,d) + (1-beta').*TeHS(j,II,d);
+        III=find(pin <= p_bdin(j,d));
+        Te(j,III,d) = Tin(j,III,d);
+    end
+end
+
 TePV = zeros(length(lon),length(lat),length(pfull),t_length);
 
 %% interpolate input T onto output grid
@@ -113,7 +154,7 @@ for d=1:t_length
     if(length(latin)>1)
         T_s_tmp = zeros(length(lat),length(pin));
         for k=1:length(pin);
-            T_s_tmp(:,k) = interp1(latin,Tin(:,k,d),lat);
+            T_s_tmp(:,k) = interp1(latin,Te(:,k,d),lat);
         end
         K = find(pfull > min(pin));
         for j=1:length(lat)
@@ -129,55 +170,21 @@ for d=1:t_length
         clear T_s_tmp
     else
         for j=1:length(lat)
-            TePV(i,j,:,d) = interp1(pin,Tin(:,d),pfull);
+            TePV(i,j,:,d) = interp1(pin,Te(:,d),pfull);
         end
     end
 end
 end
 
-%% add Held-Suarez troposphere
-TeHS=zeros(size(TePV));
-
-T0=315;
-delT=60;
-delv=10;
-p0=1e3;
-kap  = 287.04/1004;
-sigma=pfull/p0;
-
-for l=1:length(lat)
-    for d=1:t_length
-        for k=1:length(pfull)
-            if(lat(l)<=0)
-                eps=epsS*cos(2*pi*days(d)/365);
-            else
-                eps=epsN*cos(2*pi*days(d)/365);
-            end
-            TeHS(l,k,d)=max(T_strat,(T0 - delT*(sin(lat(l)*pi/180).^2) - eps*sin(lat(l)*pi/180)- delv*log(sigma(k)).*(cos(lat(l)*pi/180).^4)).*(sigma(k)^kap));
-        end
-    end
-end
-
-%% construct complete Te
-Te = zeros(size(TePV));
-for i=1:length(lon)
-    for d=1:t_length
-        for j=1:length(lat)
-            I=find(pfull > p_hsin(j,d));
-            Te(i,j,I,d) = TeHS(j,I,d);
-            II=find(pfull <= p_hsin(j,d) & pfull > p_bdin(j,d));
-            beta = (pfull(II)-p_hsin(j,d))/(p_bdin(j,d)-p_hsin(j,d));
-            Te(i,j,II,d) = beta'.*squeeze(TePV(i,j,II,d))' + (1-beta').*TeHS(j,II,d);
-            III=find(pfull <= p_bdin(j,d));
-            Te(i,j,III,d) = TePV(i,j,III,d);
-        end
-    end
-end
-
+%keep Te in range
+I = find(TePV(:) < T_range(1));
+TePV(I) = T_range(1);
+I = find(TePV(:) > T_range(2));
+TePV(I) = T_range(2);
 
 figure;
 vv = 100:5:320;
-[h,c]=contourf(lat,pfull,double(squeeze(mean(squeeze(mean(Te,4)),1)))',vv);
+[h,c]=contourf(lat,pfull,double(squeeze(mean(squeeze(mean(TePV,4)),1)))',vv);
 clabel(h,c);
 colorbar;
 set(gca,'ydir','rev');
@@ -186,7 +193,7 @@ title('Temporal mean Te');
 if(t_length > 1 && t_length <= 12)
     for t=1:t_length
         figure;
-        Ttmp = double(squeeze(mean(Te(:,:,:,t),1)));
+        Ttmp = double(squeeze(mean(TePV(:,:,:,t),1)));
         pcolor(lat,pfull,Ttmp')
         shading interp
         hold on
@@ -260,7 +267,7 @@ netcdf.putVar(ncid,latb_id,latb);
 netcdf.putVar(ncid,p_id,pfull);
 netcdf.putVar(ncid,ph_id,phalf);
 netcdf.putVar(ncid,t_id,0,length(days),days);
-netcdf.putVar(ncid,T_id,[0,0,0,0],[size(Te,1),size(Te,2),size(Te,3),size(Te,4)],Te);
+netcdf.putVar(ncid,T_id,[0,0,0,0],[size(TePV,1),size(TePV,2),size(TePV,3),size(TePV,4)],TePV);
 
 
 netcdf.close(ncid)
