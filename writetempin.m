@@ -156,7 +156,7 @@ for d=1:t_length
         for k=1:length(pin);
             T_s_tmp(:,k) = interp1(latin,Te(:,k,d),lat);
         end
-        K = find(pfull > min(pin));
+        K = find(pfull > min(pin) & pfull < max(pin));
         for j=1:length(lat)
             TePV(i,j,K,d) = interp1(pin,T_s_tmp(j,:),pfull(K));
         end

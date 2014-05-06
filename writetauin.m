@@ -126,7 +126,7 @@ for d=1:t_length
         for k=1:length(pin);
             tau_tmp(:,k) = interp1(latin,tauin(:,k,d),lat);
         end
-        K = find(pfull >= min(pin));
+        K = find(pfull > min(pin) & pfull < max(pin));
         for j=1:length(lat)
             tau(j,K,d) = interp1(pin,tau_tmp(j,:),pfull(K));
         end
