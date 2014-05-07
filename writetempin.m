@@ -28,8 +28,6 @@ function writetempin(latin,pin,days,Tin,T_strat,epsS,epsN,p_hsin,p_bdin,filename
 if(pin(end)<pin(1))
     pin = pin(end:-1:1);
     Tin = Tin(:,end:-1:1,:);
-    p_hsin = p_hsin(:,end:-1:1,:);
-    p_bdin = p_bdin(:,end:-1:1,:);
 end
 latin=latin(:);pin=pin(:);
 
@@ -38,7 +36,7 @@ Rd   = 287.04;
 T_range = [100,400]; 
 
 
-%% read fms dimensions and interpolate Teq onto them
+%% read fms dimensions and interpolate Teq onto them (if file exists)
 if( exist('directory','var') && exist([directory,'/atmos_average.nc'],'file') )
     file=[directory,'/atmos_average_pfull.nc'];
 
@@ -108,58 +106,49 @@ else
     end
 end
 
-%% add Held-Suarez troposphere
-TeHS=zeros(size(Tin));
+%% add Held-Suarez troposphere on output grid
+TeHS=zeros(length(lat),length(pfull),t_length);
 
 T0=315;
 delT=60;
 delv=10;
 p0=1e3;
 kap  = 287.04/1004;
-sigma=pin/p0;
+sigma=pfull/p0;
 
-for l=1:length(latin)
+for l=1:length(lat)
     for d=1:t_length
-        for k=1:length(pin)
-            if(latin(l)<=0)
+        for k=1:length(pfull)
+            if(lat(l)<=0)
                 eps=epsS*cos(2*pi*days(d)/365);
             else
                 eps=epsN*cos(2*pi*days(d)/365);
             end
-            TeHS(l,k,d)=max(T_strat,(T0 - delT*(sin(latin(l)*pi/180).^2) - eps*sin(latin(l)*pi/180)- delv*log(sigma(k)).*(cos(latin(l)*pi/180).^4)).*(sigma(k)^kap));
+            TeHS(l,k,d)=max(T_strat,(T0 - delT*(sin(lat(l)*pi/180).^2) - eps*sin(lat(l)*pi/180)- delv*log(sigma(k)).*(cos(lat(l)*pi/180).^4)).*(sigma(k)^kap));
         end
     end
 end
 
-%% construct complete Te
-Te = zeros(size(Tin));
-for d=1:t_length
-    for j=1:length(latin)
-        I=find(pin > p_hsin(j,d));
-        Te(j,I,d) = TeHS(j,I,d);
-        II=find(pin <= p_hsin(j,d) & pin > p_bdin(j,d));
-        beta = (pin(II)-p_hsin(j,d))/(p_bdin(j,d)-p_hsin(j,d));
-        Te(j,II,d) = beta'.*Tin(j,II,d) + (1-beta').*TeHS(j,II,d);
-        III=find(pin <= p_bdin(j,d));
-        Te(j,III,d) = Tin(j,III,d);
-    end
-end
+%% interpolate input T onto output grid
 
 TePV = zeros(length(lon),length(lat),length(pfull),t_length);
-
-%% interpolate input T onto output grid
+JJ = find(lat > min(latin) & lat < max(latin)); %avoid extrapolating
+K = find(pfull > min(pin) & pfull < max(pin)); %avoid extrapolating
 
 for i=1:length(lon)
 for d=1:t_length
     if(length(latin)>1)
         T_s_tmp = zeros(length(lat),length(pin));
         for k=1:length(pin);
-            T_s_tmp(:,k) = interp1(latin,Te(:,k,d),lat);
+            T_s_tmp(JJ,k) = interp1(latin,Tin(:,k,d),lat(JJ));
         end
-        K = find(pfull > min(pin) & pfull < max(pin));
+        T_s_tmp(1:JJ(1),k) = T_s_tmp(JJ(1),k);
+        T_s_tmp(JJ(end):end,k) = T_s_tmp(JJ(end),k);
         for j=1:length(lat)
             TePV(i,j,K,d) = interp1(pin,T_s_tmp(j,:),pfull(K));
         end
+        TePV(i,j,K(end):end,d) = TePV(i,j,K(end),d);
+        clear T_s_tmp
         %treat outside of input domain
         %Ttopmean = mean(TePV(:,min(K),d),1);
         for kk=1:min(K)
@@ -167,24 +156,51 @@ for d=1:t_length
             %T_s(:,kk,d)=T_s(:,min(K),d) + (pfull(kk)-pfull(min(K)))/(pfull(1)-pfull(min(K)))*(Ttopmean - T_s(:,min(K),d)); %towards latitudinal mean on top layer
             %T_s(:,kk,d) = T_s(:,min(K),d); %no vertical gradient
         end
-        clear T_s_tmp
     else
         for j=1:length(lat)
-            TePV(i,j,:,d) = interp1(pin,Te(:,d),pfull);
+            TePV(i,j,:,d) = interp1(pin,Tin(:,d),pfull);
         end
     end
 end
 end
+p_hs = zeros(length(lat),t_length);
+p_bd = zeros(length(lat),t_length);
+for d=1:t_length
+    p_hs(JJ,d) = interp1(latin,p_hsin(:,d),lat(JJ));
+    p_bd(JJ,d) = interp1(latin,p_bdin(:,d),lat(JJ));
+    p_hs(1:JJ(1),d) = p_hs(JJ(1),d);
+    p_bd(1:JJ(1),d) = p_bd(JJ(1),d);
+    p_hs(JJ(end):end,d) = p_hs(JJ(end),d);
+    p_bd(JJ(end):end,d) = p_bd(JJ(end),d);
+end
+
+%% construct complete Te
+Te = zeros(size(TePV));
+TeHS = permute(repmat(TeHS,[1,1,1,length(lon)]),[4,1,2,3]);
+for d=1:t_length
+    for j=1:length(lat)
+        I=find(pfull > p_hs(j,d));
+        Te(:,j,I,d) = TeHS(:,j,I,d);
+        II=find(pfull <= p_hs(j,d) & pfull > p_bd(j,d));
+        beta = (pfull(II)-p_hs(j,d))/(p_bd(j,d)-p_hs(j,d));
+        beta = reshape(permute(repmat(beta,[1,length(lon)]),[2,1]),[length(lon),1,length(II),1]);
+        Te(:,j,II,d) = beta.*TePV(:,j,II,d) + (1-beta).*TeHS(:,j,II,d);
+        III=find(pfull <= p_bd(j,d));
+        Te(:,j,III,d) = TePV(:,j,III,d);
+    end
+end
+
+
 
 %keep Te in range
-I = find(TePV(:) < T_range(1));
-TePV(I) = T_range(1);
-I = find(TePV(:) > T_range(2));
-TePV(I) = T_range(2);
+I = find(Te(:) < T_range(1));
+Te(I) = T_range(1);
+I = find(Te(:) > T_range(2));
+Te(I) = T_range(2);
 
 figure;
 vv = 100:5:320;
-[h,c]=contourf(lat,pfull,double(squeeze(mean(squeeze(mean(TePV,4)),1)))',vv);
+[h,c]=contourf(lat,pfull,double(squeeze(mean(squeeze(mean(Te,4)),1)))',vv);
 clabel(h,c);
 colorbar;
 set(gca,'ydir','rev');
@@ -267,7 +283,7 @@ netcdf.putVar(ncid,latb_id,latb);
 netcdf.putVar(ncid,p_id,pfull);
 netcdf.putVar(ncid,ph_id,phalf);
 netcdf.putVar(ncid,t_id,0,length(days),days);
-netcdf.putVar(ncid,T_id,[0,0,0,0],[size(TePV,1),size(TePV,2),size(TePV,3),size(TePV,4)],TePV);
+netcdf.putVar(ncid,T_id,[0,0,0,0],[size(Te,1),size(Te,2),size(Te,3),size(Te,4)],Te);
 
 
 netcdf.close(ncid)
