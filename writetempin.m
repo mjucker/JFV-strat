@@ -141,9 +141,9 @@ for d=1:t_length
         T_s_tmp = zeros(length(lat),length(pin));
         for k=1:length(pin);
             T_s_tmp(JJ,k) = interp1(latin,Tin(:,k,d),lat(JJ));
+            T_s_tmp(1:JJ(1),k) = T_s_tmp(JJ(1),k);
+            T_s_tmp(JJ(end):end,k) = T_s_tmp(JJ(end),k);
         end
-        T_s_tmp(1:JJ(1),k) = T_s_tmp(JJ(1),k);
-        T_s_tmp(JJ(end):end,k) = T_s_tmp(JJ(end),k);
         for j=1:length(lat)
             TePV(i,j,K,d) = interp1(pin,T_s_tmp(j,:),pfull(K));
         end
