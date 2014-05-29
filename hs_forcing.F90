@@ -123,7 +123,7 @@ private
 !-----------------------------------------------------------------------
 
    character(len=128) :: version='$Id: hs_forcing.f90, 2012/05/24 mj $'
-   character(len=128) :: tagname='$Name: riga_201012 $'
+   character(len=128) :: tagname='$Name: riga_201012_mj $'
 
    real :: tka, tks, vkf
    real :: scdamp
