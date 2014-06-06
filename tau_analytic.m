@@ -122,6 +122,7 @@ if ( exist('filename','var'))
     for l=1:length(lon)
         tdamp(l,:,:,:)=tau;
     end
+    tdamp=tdamp*84600; %[s]
     
     ncid = netcdf.create(filename,'64BIT_OFFSET');
     % define dimensions and variables
