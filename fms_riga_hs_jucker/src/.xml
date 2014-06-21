@@ -1,0 +1,13 @@
+<perldata>
+ <hashref memory_address="0x11bcc350">
+  <item key="fms_spectral_solo">
+   <hashref memory_address="0x1189ca10">
+    <item key="codeBase">fms_spectral_solo</item>
+    <item key="codeTag">riga_201012</item>
+    <item key="sourceCsh">cvs co -r riga_201012 atmos_shared/interpolator/interpolator.F90 cvs co -r riga_201012 shared/time_interp/time_interp.F90</item>
+    <item key="vcBrand">cvs</item>
+    <item key="vcRoot">/home/fms/cvs</item>
+   </hashref>
+  </item>
+ </hashref>
+</perldata>

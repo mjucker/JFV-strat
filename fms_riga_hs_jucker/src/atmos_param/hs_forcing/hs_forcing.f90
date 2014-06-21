@@ -87,9 +87,15 @@ private
    real :: pv_dphi  = 10.    !  polar vortex edge width (in degrees)
    real :: pv_gamma = -1.e-3 !  polar vortex lapse rate (in degK/m)
 !
+!  use vertical polynomial damping time profile mj
+!
+   real :: k0 =1.,k1=0.,k2=0.,k3=0.,k4=0.,k5=0.
+!
    logical :: sponge_flag = .true. !flag for sponge at top of model
    real :: sponge_pbottom = 1.e2    !bottom of sponge layer, where damping is zero (Pa)
    real :: sponge_tau_days  = 1.0   !damping time scale for the sponge (days)
+   logical :: sponge_eddies = .true. !mj only damp eddies in sponge layer
+   real :: sponge_eddies_days = 1.0  !mj eddies sponge damping time [days]
 
    real :: p_tropopause = 0.1       !tropopause pressure divided by reference pressure
 
@@ -100,6 +106,7 @@ private
 
    logical :: sc_flag = .false. ! flag for seasonal cycle in stratospheric te
    real ::  sc_phi0n,sc_phi0s,sc_dphin,sc_dphis !generalizations, for seasonal cycle option, of pv_phi0 and pv_dphi above
+   real :: delT=-00.00,p0=0.4,delth=30 ! mj correction of T_tropopause in T_eq
    
 !-----------------------------------------------------------------------
 
@@ -118,12 +125,15 @@ private
                               p_tropopause,scaife_damp, scaife_flag,         &  ! hmchen
                               sigma_strat1,sigma_strat2,k_strat,             &  ! tjr
                               sc_flag,sc_phi0n,sc_phi0s,sc_dphin,sc_dphis,   &
-                              equilibrium_tau_option,equilibrium_tau_file     !mj
+                              sat_only_flag,delT,p0,delth,                   &  !mj
+                              k0,k1,k2,k3,k4,k5,                             &  !mj
+                              equilibrium_tau_option,equilibrium_tau_file,   &  !mj
+                              sponge_eddies,sponge_eddies_days                  !mj
 
 !-----------------------------------------------------------------------
 
    character(len=128) :: version='$Id: hs_forcing.f90, 2012/05/24 mj $'
-   character(len=128) :: tagname='$Name: riga_201012_mj $'
+   character(len=128) :: tagname='$Name: riga_201012 $'
 
    real :: tka, tks, vkf
    real :: scdamp
@@ -145,16 +155,20 @@ contains
 !#######################################################################
 
  subroutine hs_forcing ( is, ie, js, je, dt, Time, lon, lat, p_half, p_full, &
-                         u, v, t, r, um, vm, tm, rm, udt, vdt, tdt, rdt,&
+                         u, v, t, vor, r, um, vm, tm, vom, rm, udt, vdt, tdt, rdt,&
+                         s_geo, & !mj
                          mask, kbot )
+!-----------------------------------------------------------------------
+use     tracer_manager_mod, only: get_tracer_index, NO_TRACER !mj
 
 !-----------------------------------------------------------------------
    integer, intent(in)                        :: is, ie, js, je
       real, intent(in)                        :: dt
  type(time_type), intent(in)                  :: Time
       real, intent(in),    dimension(:,:)     :: lon, lat
+      real, intent(in),    dimension(:,:)     :: s_geo !mj
       real, intent(in),    dimension(:,:,:)   :: p_half, p_full
-      real, intent(in),    dimension(:,:,:)   :: u, v, t, um, vm, tm
+      real, intent(in),    dimension(:,:,:)   :: u, v, t, vor, um, vm, tm, vom
       real, intent(in),    dimension(:,:,:,:) :: r, rm
       real, intent(inout), dimension(:,:,:)   :: udt, vdt, tdt
       real, intent(inout), dimension(:,:,:,:) :: rdt
@@ -164,8 +178,10 @@ contains
 !-----------------------------------------------------------------------
    real, dimension(size(t,1),size(t,2))           :: ps, diss_heat, surface_forcing
    real, dimension(size(t,1),size(t,2),size(t,3)) :: ttnd, utnd, vtnd, teq, pmass
-   real, dimension(size(r,1),size(r,2),size(r,3)) :: rst, rtnd
+   real, dimension(size(r,1),size(r,2),size(r,3)) :: rst, rtnd, vort
+   real, dimension(size(r,1),size(r,2),size(r,3)) :: tst, pvt !mj
    integer :: i, j, k, kb, n, num_tracers
+   integer :: n_hum, n_pv !mj
    logical :: used
    real    :: flux, sink, value
    character(len=128) :: scheme, params
@@ -216,7 +232,7 @@ contains
 
 !-----------------------------------------------------------------------
 !     thermal forcing for held & suarez (1994) benchmark calculation
-      call newtonian_damping ( Time, lat, ps, p_full, p_half, t, ttnd, teq, mask,surface_forcing )
+      call newtonian_damping ( Time, lat, ps, p_full, p_half, t, ttnd, teq, mask,surface_forcing,delT,delth,p0 ) !mj
 
       tdt = tdt + ttnd
       if (id_newtonian_damping > 0) used = send_data(id_newtonian_damping, ttnd, Time, is, js)
@@ -234,23 +250,56 @@ contains
 !     -------- tracers -------
 
       call get_number_tracers(MODEL_ATMOS, num_tracers=num_tracers)
+      n_hum   = get_tracer_index(MODEL_ATMOS, 'sphum') !mj
+      n_pv   = get_tracer_index(MODEL_ATMOS, 'pv') !mj
       
       if(num_tracers == size(rdt,4)) then
         do n = 1, size(rdt,4)
            flux = trflux
            sink = trsink
-           if (query_method('tracer_sms', MODEL_ATMOS, n, scheme, params)) then
-              if (uppercase(trim(scheme)) == 'NONE') cycle
-              if (uppercase(trim(scheme)) == 'OFF') then
-                 flux = 0.; sink = 0.
+           if (n == n_hum) then !mj
+              rst = rm(:,:,:,n) + dt*rdt(:,:,:,n) !mj
+              tst = tm + dt*tdt !mj
+              call sphum_source_sink ( flux, sink, p_full, rst, rtnd, s_geo, tst ,dt, kbot ) !mj
+              rdt(:,:,:,n) = rdt(:,:,:,n) + rtnd !mj
+           elseif(n == get_tracer_index(MODEL_ATMOS,'age_of_air')) then !mj age of air tracer
+              rst = rm(:,:,:,n) + dt*rdt(:,:,:,n) !mj
+              call age_source_sink ( flux, sink, p_half, rst, rtnd, kbot ) !mj
+              rdt(:,:,:,n) = rdt(:,:,:,n) + rtnd !mj
+           elseif(n == get_tracer_index(MODEL_ATMOS,'methane')) then !mj methane tracer
+              rst = rm(:,:,:,n) + dt*rdt(:,:,:,n) !mj
+              call methane_source_sink ( flux, sink, p_half, rst, rtnd, kbot ) !mj
+              rdt(:,:,:,n) = rdt(:,:,:,n) + rtnd !mj      
+           elseif(n == n_pv) then
+              rst = rm(:,:,:,n) + dt*rdt(:,:,:,n) !mj
+              tst = tm + dt*tdt !mj
+              call pv_tracer(vom, tst, lat, p_full, dt, rst, rtnd)
+              rdt(:,:,:,n) = rdt(:,:,:,n) + rtnd !mj   
+           elseif(n == get_tracer_index(MODEL_ATMOS, 'APV')) then !mj Blocking index as Schwierz2004
+              rst = rm(:,:,:,n) + dt*rdt(:,:,:,n) !mj
+              tst = tm + dt*tdt !mj
+              if(n_pv < 1 .or. n_pv > n )then !pv tracer not present or after APV in field_table
+                 call pv_tracer(vom, tst, lat, p_full, 0.0, rst, pvt) ! pvt = pv, not dpv/dt
+                 call apv_tracer(pvt,p_half,dt,rst,rtnd)
               else
-                 if (parse(params,'flux',value) == 1) flux = value
-                 if (parse(params,'sink',value) == 1) sink = value
+                 pvt = rm(:,:,:,n_pv) + dt*rdt(:,:,:,n_pv) !mj
+                 call apv_tracer(pvt,p_full,dt,rst,rtnd)
               endif
-           endif
-           rst = rm(:,:,:,n) + dt*rdt(:,:,:,n)
-           call tracer_source_sink ( flux, sink, p_half, rst, rtnd, kbot )
-           rdt(:,:,:,n) = rdt(:,:,:,n) + rtnd
+              rdt(:,:,:,n) = rdt(:,:,:,n) + rtnd !mj  
+           else !mj
+              if (query_method('tracer_sms', MODEL_ATMOS, n, scheme, params)) then
+                 if (uppercase(trim(scheme)) == 'NONE') cycle
+                 if (uppercase(trim(scheme)) == 'OFF') then
+                    flux = 0.; sink = 0.
+                 else
+                    if (parse(params,'flux',value) == 1) flux = value
+                    if (parse(params,'sink',value) == 1) sink = value
+                 endif
+              endif
+              rst = rm(:,:,:,n) + dt*rdt(:,:,:,n)
+              call tracer_source_sink ( flux, sink, p_half, rst, rtnd, kbot )
+              rdt(:,:,:,n) = rdt(:,:,:,n) + rtnd
+           endif !mj
         enddo
       else
         call error_mesg('hs_forcing','size(rdt,4) not equal to num_tracers', FATAL)
@@ -446,7 +495,7 @@ contains
 
 !#######################################################################
 
- subroutine newtonian_damping ( Time, lat, ps, p_full, p_half, t, tdt, teq, mask,surface_forcing) 
+ subroutine newtonian_damping ( Time, lat, ps, p_full, p_half, t, tdt, teq, mask,surface_forcing,delT,delth,p0) !mj
 !-----------------------------------------------------------------------
 !
 !   routine to compute thermal forcing for held & suarez (1994)
@@ -455,6 +504,7 @@ contains
 !-----------------------------------------------------------------------
 
 type(time_type), intent(in)         :: Time
+real, intent(in)                    :: delT,delth,p0 !mj
 real, intent(in),  dimension(:,:)   :: lat, ps, surface_forcing
 real, intent(in),  dimension(:,:,:) :: p_full, t, p_half
 real, intent(out), dimension(:,:,:) :: tdt, teq
@@ -469,7 +519,6 @@ real, intent(in),  dimension(:,:,:), optional :: mask
        real, dimension(size(t,1),size(t,2),size(t,3)) :: tdamp, dQdamp
 
        real, dimension(size(t,2),size(t,3)) :: tz,tauz !mj
-       real    ::   k0,k1,k2,k3,k4,k5  !mj (pzg corrected)
 
        integer :: i, j, k, l
        real    :: tcoeff, pref, tcoeff_strat       ! tjr 06/27/03
@@ -507,6 +556,9 @@ real, intent(in),  dimension(:,:,:), optional :: mask
    real :: t0n,t0s,t_days,en,es
    integer :: days,seconds
    integer :: hits
+!-------------------------mj changing tropical tropopause temp----------
+   real :: lgp0
+   real, dimension(size(lat,1),size(lat,2)) :: lgpt,ltcos,clarg
 ! from namelist: delth [degrees], latitudinal extent of temperature vatiation
 !                p0 [p_tropopause], < 1, defines upper boundary of temperature variation
 !                delT [K], temperature variation
@@ -527,6 +579,7 @@ real, intent(in),  dimension(:,:,:), optional :: mask
          es = max(0.0,sin((t_days-t0s)*2*acos(-1.)/360));
          en = max(0.0,sin((t_days-t0n)*2*acos(-1.)/360));
          eps_sc = eps*(en - es)
+!         eps_sc =  -eps*sin((t_days-t0s)/360*2*pif*180)
 !mj
       else
          eps_sc = eps
@@ -621,6 +674,8 @@ real, intent(in),  dimension(:,:,:), optional :: mask
       if ( pv_sat_flag ) then
 
          if (sc_flag) then
+!mj already for eps            es = max(0.0,sin((t_days-t0s)*2*acos(-1.)/360));
+!mj already for eps            en = max(0.0,sin((t_days-t0n)*2*acos(-1.)/360));
             lat_wgt = 0.5*(1-tanh((lat/pif-sc_phi0n)/sc_dphin))*en + 0.5*(1-tanh((lat/pif-sc_phi0s)/sc_dphis))*es
          else
             lat_wgt = 0.5 * ( 1. - tanh((lat/pif-pv_phi0)/pv_dphi) );
@@ -634,7 +689,31 @@ real, intent(in),  dimension(:,:,:), optional :: mask
                   t_sat(:,:) = sat_t(l) * (p_norm(:,:)/sat_p(l))**(-rdgas*sat_g(l)/grav);
                end where
             end do
+!mj change tropical tropopause temperature
+            lgpt=log10(p_norm(:,:)/p_tropopause)
+            lgp0=log10(p0)
+            clarg = 0.5*(1. + cos(2.*lat*90./delth + eps_sc*pif)) ! smoother start, but stronger gradient
+!            clarg = cos(lat*90./delth + eps_sc*pif) ! abrupt start, but less gradient
+            where ( abs(lgpt) .lt. abs(lgp0) .and. clarg .gt. 0. .and. abs(lat) .lt. abs(pif*delth) )
+               ltcos = 0.5*(1. + cos(2*pif*90.*lgpt/lgp0))*clarg ! smoother start, but stronger gradient
+!               ltcos = cos(pif*90.*lgpt/lgp0)*clarg ! abrupt start, but less gradient
+            elsewhere
+               ltcos = 0.
+            endwhere
+!mj end
             
+
+            if(sat_only_flag)then !mj
+               where ( p_norm < p_tropopause ) !mj
+                  teq(:,:,k) = t_sat !mj no PV
+               endwhere !mj
+            else !mj
+               where ( p_norm < p_tropopause )
+                  t_pv = t_tropopause * (p_norm/p_tropopause)**(rdgas*pv_gamma/grav)
+                  teq(:,:,k) = (1-lat_wgt) * t_sat + lat_wgt * t_pv;
+               endwhere
+            end if !mj
+            teq(:,:,k) = teq(:,:,k) + delT*ltcos !mj
          end do
       end if
 
@@ -709,6 +788,18 @@ real    :: scdamp
             vdt(:,:,k) = 0.0
          endwhere
 
+         if (sponge_eddies) then !mj sponge only on eddies, i.e. relax to zonal mean
+            sponge_coeff = 1./sponge_eddies_days/86400.
+            um=sum(u,1)/size(u,1)
+            vm=sum(v,1)/size(v,1)
+            do i=1,size(u,1)
+               where (p_full(i,:,k) < sponge_pbottom)
+                  vfactr(i,:) = -sponge_coeff*(sponge_pbottom-p_full(i,:,k))**2/(sponge_pbottom)**2
+                  udt(i,:,k) = udt(i,:,k) + vfactr(i,:)*(u(i,:,k) - um(:,k))
+                  vdt(i,:,k) = vdt(i,:,k) + vfactr(i,:)*(v(i,:,k) - vm(:,k))
+               endwhere
+            enddo
+         endif
          if (sponge_flag) then   ! t.r.
             sponge_coeff = 1./sponge_tau_days/86400.
             where (p_full(:,:,k) < sponge_pbottom)
@@ -748,7 +839,250 @@ real    :: scdamp
 
 !#######################################################################
 
+ subroutine sphum_source_sink ( flux, damp, p_full, r, rdt, s_geo, t, dt, kbot )
+   use constants_mod !mj
+!-----------------------------------------------------------------------
+      real, intent(in)  :: flux, damp, p_full(:,:,:), r(:,:,:)
+      real, intent(out) :: rdt(:,:,:)
+   integer, intent(in), optional :: kbot(:,:)
+!-----------------------------------------------------------------------
+      real, dimension(size(r,1),size(r,2),size(r,3)) :: source, sink
+
+      integer :: i, j, kb
+      real    :: rdamp
+!-----------------------------------------------------------------------
+      real, intent(in) :: t(:,:,:), dt !mj
+      real, intent(in) :: s_geo(:,:) !mj
+      real, dimension(size(r,1),size(r,2),size(r,3)) :: qsat !mj
+      integer, dimension(size(s_geo,1),size(s_geo,2)) :: sea_surf !mj
+!-----------------------------------------------------------------------
+      integer,parameter :: si=23, sl=2
+
+      rdamp = damp
+      if (rdamp < 0.) rdamp = -86400.*rdamp   ! convert days to seconds
+      if (rdamp > 0.) rdamp = 1./rdamp
+
+!------------ surface source and global sink ---------------------------
+      
+      source(:,:,:)=0.0
+      sink(:,:,:)=0.0 !mj
+      sea_surf=0 !mj
+
+      where(s_geo < 10.*grav)sea_surf=1 !mj
+
+      if (present(kbot)) then
+         do j=1,size(r,2)
+            do i=1,size(r,1)
+               kb = kbot(i,j)
+               qsat(i,j,:) = RDGAS*ES0*exp(-HLV*(1./t(i,j,:)-1./TFREEZE)/RVGAS)/RVGAS !mj
+               qsat(i,j,2:kb) = qsat(i,j,2:kb)/p_full(i,j,2:kb) !mj
+               qsat(i,j,1) = qsat(i,j,2) !mj
+               if(kb.eq.size(r,3))then
+                  source(i,j,kb) = max(0.,-vkf*(r(i,j,kb)-qsat(i,j,kb))) !mj specific humidity, above sea only
+               endif
+            enddo
+         enddo
+      else
+        kb = size(r,3)
+        qsat = RDGAS*ES0*exp(-HLV*(1./t - 1./TFREEZE)/RVGAS)/RVGAS !mj
+        qsat = qsat/p_full !mj
+        source(:,:,kb) = max(0.,-vkf*(r(:,:,kb)-qsat(:,:,kb))) !mj 
+        source(:,:,kb) = source(:,:,kb)*sea_surf(:,:) !mj mountains
+     endif
+
+     where(r-qsat > 0.)
+        sink = (r-qsat)/dt !mj direct complete removal to sat value after one time step
+!!         sink = 10.*vkf*(r-qsat) !mj 10 times shorter time scale than source
+!         sink = 1. + qsat*HLV*HLV/(RVGAS*CP_AIR*t*t) !mj as in Frierson 2006 JAS
+!         sink = (r - qsat)/sink/dt !mj continued
+     end where
+      
+!      sink = sink + rdamp*r !mj add global sink
+      
+!      sink = 0.
+!      sink = r/dt
+!      source = 0.
+
+      rdt = source - sink
+
+!-----------------------------------------------------------------------
+
+ end subroutine sphum_source_sink
+
+!-----------------------------------------------------------------------
+
+ subroutine age_source_sink ( flux, damp, p_half, r, rdt, kbot )
+!-----------------------------------------------------------------------
+      real, intent(in)  :: flux, damp, p_half(:,:,:), r(:,:,:)
+      real, intent(out) :: rdt(:,:,:)
+   integer, intent(in), optional :: kbot(:,:)
+!-----------------------------------------------------------------------
+      real, dimension(size(r,1),size(r,2),size(r,3)) :: source,sink
+      real, dimension(size(r,1),size(r,2))           :: pmass
+
+      integer :: i, j, kb
+      real    :: rdamp
+!-----------------------------------------------------------------------
+ 
+      rdamp = damp
+      if (rdamp < 0.) rdamp = -86400.*rdamp   ! convert days to seconds
+      if (rdamp > 0.) rdamp = 1./rdamp
+
+!------------ simple surface source and no sink --------------------
+    
+      source=0.0
+      sink  =0.0
+
+      if (present(kbot)) then
+         do j=1,size(r,2)
+            do i=1,size(r,1)
+               kb = kbot(i,j)
+               pmass (i,j)    = p_half(i,j,kb+1) - p_half(i,j,kb)
+               source(i,j,kb) = flux/pmass(i,j)
+            enddo
+         enddo
+      else
+         kb = size(r,3)
+         pmass (:,:)    = p_half(:,:,kb+1) - p_half(:,:,kb)
+         source(:,:,kb) = flux/pmass
+      endif
+
+      sink = rdamp*r
+
+      rdt = source - sink      
+
+!-----------------------------------------------------------------------
+
+ end subroutine age_source_sink
+
+!-----------------------------------------------------------------------
+
+ subroutine methane_source_sink ( flux, damp, p_half, r, rdt, kbot )
+!-----------------------------------------------------------------------
+      real, intent(in)  :: flux, damp, p_half(:,:,:), r(:,:,:)
+      real, intent(out) :: rdt(:,:,:)
+   integer, intent(in), optional :: kbot(:,:)
+!-----------------------------------------------------------------------
+      real, dimension(size(r,1),size(r,2),size(r,3)) :: source, sink
+      real, dimension(size(r,1),size(r,2))           :: pmass
+
+      integer :: i, j, kb
+      real    :: rdamp
+!-----------------------------------------------------------------------
+
+      rdamp = damp
+      if (rdamp < 0.) rdamp = -86400.*rdamp   ! convert days to seconds
+      if (rdamp > 0.) rdamp = 1./rdamp
+
+!------------ surface source and global sink ---------------------------
+     
+      source(:,:,:)=0.0
+      sink(:,:,:)=0.0 !mj
+
+
+      if (present(kbot)) then
+         do j=1,size(r,2)
+            do i=1,size(r,1)
+               kb = kbot(i,j)
+               source(i,j,kb) = -vkf*(r(i,j,kb)-flux) !mj tracer value fixed to trflux at bottom
+            enddo
+         enddo
+      else
+        kb = size(r,3)
+        source(:,:,kb) = -vkf*(r(:,:,kb)-flux) !mj tracer value fixed to trflux at bottom
+     endif
+      
+
+     sink = rdamp*r
+      
+
+     rdt = source - sink
+
+      
+
+!-----------------------------------------------------------------------
+
+ end subroutine methane_source_sink
+
+!-----------------------------------------------------------------------
+
+ subroutine pv_tracer ( vorn, temp, lat, p_full, dt, r, rdt )
+ use constants_mod
+!-----------------------------------------------------------------------
+      real, intent(in)  :: vorn(:,:,:), temp(:,:,:)!,dZdt(:,:,:), Dtdt(:,:,:)
+      real, intent(in)  :: lat(:,:), p_full(:,:,:), dt, r(:,:,:)
+      real, intent(out) :: rdt(:,:,:)
+!-----------------------------------------------------------------------
+      integer :: i,j,k
+!      real,dimension(size(rdt,1),size(rdt,2)) :: wa,dTheta
+      real :: wa,dTheta
+!-----------------------------------------------------------------------
+     
+      
+      do k=2,size(rdt,3) !actual value
+         do j=1,size(rdt,2)
+            do i=1,size(rdt,1)
+               wa = 2*OMEGA*sin(lat(i,j)) + vorn(i,j,k) !absolute vorticity
+               dTheta = (1.e5/p_full(i,j,k))**KAPPA*temp(i,j,k) - (1.e5/p_full(i,j,k-1))**KAPPA*temp(i,j,k-1) ! potential temperature variation in p
+               rdt(i,j,k) = -GRAV*wa*dTheta/(p_full(i,j,k)-p_full(i,j,k-1)) ! potential vorticity
+            enddo
+         enddo
+      enddo
+      rdt(:,:,1)=rdt(:,:,2)
+!!$      rdt = vorn
+      
+      if(dt.gt.0.0)then ! normal pv tracer
+         rdt = (rdt-r)/dt
+      endif
+
+!-----------------------------------------------------------------------
+
+ end subroutine pv_tracer
+
+!-----------------------------------------------------------------------
+
+ subroutine apv_tracer ( pv, p_half, dt, r, rdt )
+!-----------------------------------------------------------------------
+      real, intent(in)  :: pv(:,:,:), p_half(:,:,:), dt, r(:,:,:)
+      real, intent(out) :: rdt(:,:,:)
+!-----------------------------------------------------------------------
+      real, dimension(size(rdt,1),size(rdt,2)) :: del_p, apv
+      integer :: i,j,k
+      real    :: dp,p_low, p_high
+!-----------------------------------------------------------------------
+      p_low  = 15000.
+      p_high = 50000.
+      del_p  = 0.
+      apv    = 0.
+      
+      do k=2,size(rdt,3) 
+         do j=1,size(rdt,2)
+            do i=1,size(rdt,1)
+               if(p_half(i,j,k) >= p_low .and. p_half(i,j,k+1) <= p_high)then
+                  dp = p_half(i,j,k+1) - p_half(i,j,k)
+                  del_p(i,j) = del_p(i,j) + dp
+                  apv(i,j) = apv(i,j) + pv(i,j,k)*dp
+               endif
+            enddo
+         enddo
+      enddo
+      apv = apv/del_p
+      do k=2,size(rdt,3)
+         rdt(:,:,k) = apv(:,:)
+      enddo
+      rdt(:,:,1)=rdt(:,:,2)
+!!$      rdt = vorn
+      
+      rdt = (rdt-r)/dt
+
+!-----------------------------------------------------------------------
+
+ end subroutine apv_tracer
+
+!-----------------------------------------------------------------------
+
  subroutine tracer_source_sink ( flux, damp, p_half, r, rdt, kbot )
+!   use mpp_mod, only: mpp_pe, mpp_npes !mj localized source
 
 !-----------------------------------------------------------------------
       real, intent(in)  :: flux, damp, p_half(:,:,:), r(:,:,:)
@@ -761,6 +1095,7 @@ real    :: scdamp
       integer :: i, j, kb
       real    :: rdamp
 !-----------------------------------------------------------------------
+!      integer,parameter :: si=23, sl=2 !mj localized source
 
       rdamp = damp
       if (rdamp < 0.) rdamp = -86400.*rdamp   ! convert days to seconds
@@ -784,6 +1119,10 @@ real    :: scdamp
          source(:,:,kb) = flux/pmass(:,:)
    endif
 
+!mj localized source
+!     source = 0.
+!     pmass (:,:)    = p_half(:,:,si+1) - p_half(:,:,si) ! mj source over tropics
+!     if (mpp_pe() == mpp_npes()/2-1)source(:,sl,si) = flux/pmass(:,sl) ! mj source over tropics
 
 
      sink(:,:,:) = rdamp*r(:,:,:)
