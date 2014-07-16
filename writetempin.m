@@ -132,8 +132,8 @@ end
 %% interpolate input T onto output grid
 
 TePV = zeros(length(lon),length(lat),length(pfull),t_length);
-JJ = find(lat > min(latin) & lat < max(latin)); %avoid extrapolating
-K = find(pfull > min(pin) & pfull < max(pin)); %avoid extrapolating
+JJ = find(lat >= min(latin) & lat <= max(latin)); %avoid extrapolating
+K = find(pfull >= min(pin) & pfull <= max(pin)); %avoid extrapolating
 
 for i=1:length(lon)
 for d=1:t_length
@@ -151,10 +151,12 @@ for d=1:t_length
         clear T_s_tmp
         %treat outside of input domain
         %Ttopmean = mean(TePV(:,min(K),d),1);
-        for kk=1:min(K)
-            TePV(i,:,kk,d)=squeeze(TePV(i,:,min(K),d))' - 10*(pfull(kk)-pfull(min(K)))/(pfull(1)-pfull(min(K)))*ones(length(lat),1); %decrease by 10K
-            %T_s(:,kk,d)=T_s(:,min(K),d) + (pfull(kk)-pfull(min(K)))/(pfull(1)-pfull(min(K)))*(Ttopmean - T_s(:,min(K),d)); %towards latitudinal mean on top layer
-            %T_s(:,kk,d) = T_s(:,min(K),d); %no vertical gradient
+        if(T_strat>0 && min(K)>1)
+            for kk=1:min(K)
+                TePV(i,:,kk,d)=squeeze(TePV(i,:,min(K),d))' - 10*(pfull(kk)-pfull(min(K)))/(pfull(1)-pfull(min(K)))*ones(length(lat),1); %decrease by 10K
+                %T_s(:,kk,d)=T_s(:,min(K),d) + (pfull(kk)-pfull(min(K)))/(pfull(1)-pfull(min(K)))*(Ttopmean - T_s(:,min(K),d)); %towards latitudinal mean on top layer
+                %T_s(:,kk,d) = T_s(:,min(K),d); %no vertical gradient
+            end
         end
     else
         for j=1:length(lat)
@@ -177,6 +179,10 @@ end
 %% construct complete Te
 Te = zeros(size(TePV));
 TeHS = permute(repmat(TeHS,[1,1,1,length(lon)]),[4,1,2,3]);
+if(T_strat == 0)
+    TeHS=zeros(size(TeHS));
+    T_range=[-1e10,1e10];
+end
 for d=1:t_length
     for j=1:length(lat)
         I=find(pfull > p_hs(j,d));

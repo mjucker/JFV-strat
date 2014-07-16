@@ -124,9 +124,9 @@ for d=1:t_length
     if(length(latin)>1)
         tau_tmp = zeros(length(lat),length(pin));
         for k=1:length(pin);
-            tau_tmp(:,k) = interp1(latin,tauin(:,k,d),lat);
+            tau_tmp(:,k) = interp1(latin,tauin(:,k,d),lat,'linear','extrap');
         end
-        K = find(pfull > min(pin) & pfull < max(pin));
+        K = find(pfull >= min(pin) & pfull <= max(pin));
         for j=1:length(lat)
             tau(j,K,d) = interp1(pin,tau_tmp(j,:),pfull(K));
         end
@@ -137,11 +137,16 @@ for d=1:t_length
             p_hs(:,d) = interp1(latin,p_hsin,lat);
             p_bd(:,d) = interp1(latin,p_bdin,lat);
         end
-        % what to do with layers above ECMWF?
+        % what to do with layers outside pin?
         if(min(K)>1)
             for kk=1:min(K)
                 %tau(:,kk,d)=tau(:,min(K),d) + 10*(pfull(kk)-pfull(min(K)))/(pfull(1)-pfull(min(K)))*ones(length(lat),1);
                 tau(:,kk,d)=tau(:,min(K),d);
+            end
+        end
+        if(max(K)<length(pfull))
+            for kk=max(K):length(pfull)
+                tau(:,kk,d)=tau(:,max(K),d);
             end
         end
         clear tau_tmp
