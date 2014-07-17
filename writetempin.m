@@ -33,7 +33,7 @@ latin=latin(:);pin=pin(:);
 
 grav = 9.81;
 Rd   = 287.04;
-T_range = [100,400]; 
+T_range = [50,400]; 
 
 
 %% read fms dimensions and interpolate Teq onto them (if file exists)
@@ -133,31 +133,32 @@ end
 
 TePV = zeros(length(lon),length(lat),length(pfull),t_length);
 JJ = find(lat >= min(latin) & lat <= max(latin)); %avoid extrapolating
-K = find(pfull >= min(pin) & pfull <= max(pin)); %avoid extrapolating
+% K = find(pfull >= min(pin) & pfull <= max(pin)); %avoid extrapolating
 
 for i=1:length(lon)
 for d=1:t_length
     if(length(latin)>1)
         T_s_tmp = zeros(length(lat),length(pin));
         for k=1:length(pin);
-            T_s_tmp(JJ,k) = interp1(latin,Tin(:,k,d),lat(JJ));
+            T_s_tmp(JJ,k) = interp1(latin,Tin(:,k,d),lat(JJ),'linear','extrap');
             T_s_tmp(1:JJ(1),k) = T_s_tmp(JJ(1),k);
             T_s_tmp(JJ(end):end,k) = T_s_tmp(JJ(end),k);
         end
         for j=1:length(lat)
-            TePV(i,j,K,d) = interp1(pin,T_s_tmp(j,:),pfull(K));
+%             TePV(i,j,K,d) = interp1(pin,T_s_tmp(j,:),pfull(K));
+            TePV(i,j,:,d) = interp1(pin,T_s_tmp(j,:),pfull,'linear','extrap');
         end
-        TePV(i,j,K(end):end,d) = TePV(i,j,K(end),d);
+%         TePV(i,j,K(end):end,d) = TePV(i,j,K(end),d);
         clear T_s_tmp
         %treat outside of input domain
         %Ttopmean = mean(TePV(:,min(K),d),1);
-        if(T_strat>0 && min(K)>1)
-            for kk=1:min(K)
-                TePV(i,:,kk,d)=squeeze(TePV(i,:,min(K),d))' - 10*(pfull(kk)-pfull(min(K)))/(pfull(1)-pfull(min(K)))*ones(length(lat),1); %decrease by 10K
-                %T_s(:,kk,d)=T_s(:,min(K),d) + (pfull(kk)-pfull(min(K)))/(pfull(1)-pfull(min(K)))*(Ttopmean - T_s(:,min(K),d)); %towards latitudinal mean on top layer
-                %T_s(:,kk,d) = T_s(:,min(K),d); %no vertical gradient
-            end
-        end
+%         if(T_strat>0 && min(K)>1)
+%             for kk=1:min(K)
+%                 TePV(i,:,kk,d)=squeeze(TePV(i,:,min(K),d))' - 10*(pfull(kk)-pfull(min(K)))/(pfull(1)-pfull(min(K)))*ones(length(lat),1); %decrease by 10K
+%                 %T_s(:,kk,d)=T_s(:,min(K),d) + (pfull(kk)-pfull(min(K)))/(pfull(1)-pfull(min(K)))*(Ttopmean - T_s(:,min(K),d)); %towards latitudinal mean on top layer
+%                 %T_s(:,kk,d) = T_s(:,min(K),d); %no vertical gradient
+%             end
+%         end
     else
         for j=1:length(lat)
             TePV(i,j,:,d) = interp1(pin,Tin(:,d),pfull);
@@ -168,8 +169,8 @@ end
 p_hs = zeros(length(lat),t_length);
 p_bd = zeros(length(lat),t_length);
 for d=1:t_length
-    p_hs(JJ,d) = interp1(latin,p_hsin(:,d),lat(JJ));
-    p_bd(JJ,d) = interp1(latin,p_bdin(:,d),lat(JJ));
+    p_hs(JJ,d) = interp1(latin,p_hsin(:,d),lat(JJ),'linear','extrap');
+    p_bd(JJ,d) = interp1(latin,p_bdin(:,d),lat(JJ),'linear','extrap');
     p_hs(1:JJ(1),d) = p_hs(JJ(1),d);
     p_bd(1:JJ(1),d) = p_bd(JJ(1),d);
     p_hs(JJ(end):end,d) = p_hs(JJ(end),d);
