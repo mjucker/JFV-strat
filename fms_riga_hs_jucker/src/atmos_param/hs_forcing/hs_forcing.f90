@@ -27,7 +27,7 @@ use  field_manager_mod, only: MODEL_ATMOS, parse
 use tracer_manager_mod, only: query_method, get_number_tracers
 use   interpolator_mod, only: interpolate_type, interpolator_init, &
                               interpolator, interpolator_end, &
-                              CONSTANT, INTERP_WEIGHTED_P
+                              CONSTANT, INTERP_WEIGHTED_P, INTERP_LINEAR_P
 implicit none
 private
 
@@ -454,7 +454,7 @@ use     tracer_manager_mod, only: get_tracer_index, NO_TRACER !mj
 ! mj read Newtonian time scale from file
 !
      if(trim(equilibrium_tau_option) == 'from_file' ) then
-        call interpolator_init (tau_interp, trim(equilibrium_tau_file)//'.nc', lonb, latb, data_out_of_bounds=(/CONSTANT/))
+        call interpolator_init (tau_interp, trim(equilibrium_tau_file)//'.nc', lonb, latb, data_out_of_bounds=(/CONSTANT/),vert_interp=(/INTERP_LINEAR_P/))
      endif
      
 
@@ -602,6 +602,7 @@ real, intent(in),  dimension(:,:,:), optional :: mask
       if(trim(equilibrium_tau_option) == 'from_file') then !mj
          !call get_zonal_mean_tau(Time, p_half, tauz)
          call get_tau(Time, p_half, tdamp)
+         tdamp = 1./tdamp !tdamp is damping rate, not time
       endif
       tcoeff = (tks-tka)/(1.0-sigma_b)
       pref = P00
@@ -1183,7 +1184,7 @@ else if(trim(local_heating_option) == 'Wang') then
          lat_factor(i,j) = exp(-lat(i,j)**2/0.32)
          do k=1,size(p_full,3)
             sig_temp = p_full(i,j,k)/ps(i,j)
-            p_factor = exp(-(sig_temp-local_heating_sigcenter)**2/0.0242 )
+            p_factor = exp(-(sig_temp-0.3)**2/0.0242 )
             tdt(i,j,k) = srfamp*lat_factor(i,j)*p_factor
          enddo
       enddo
