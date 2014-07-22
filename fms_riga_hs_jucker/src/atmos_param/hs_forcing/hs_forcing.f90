@@ -61,13 +61,14 @@ private
    real :: trflux = 1.e-5   !  surface flux for optional tracer
    real :: trsink = -0.     !  damping time for tracer
 
-   character(len=256) :: local_heating_option='' ! Valid options are 'from_file' and 'Isidoro'. Local heating not done otherwise.
+   character(len=256) :: local_heating_option='' ! Valid options are 'from_file', 'Isidoro', and 'Wang'. Local heating not done otherwise.
    character(len=256) :: local_heating_file=''   ! Name of file relative to $work/INPUT  Used only when local_heating_option='from_file'
-   real :: local_heating_srfamp=0.0              ! Degrees per day.   Used only when local_heating_option='Isidoro'
+   real :: local_heating_srfamp=0.               ! Degrees per day.   Used only when local_heating_option='Isidoro' or 'Wang'
    real :: local_heating_xwidth=10.              ! degrees longitude  Used only when local_heating_option='Isidoro'
    real :: local_heating_ywidth=10.              ! degrees latitude   Used only when local_heating_option='Isidoro'
    real :: local_heating_xcenter=180.            ! degrees longitude  Used only when local_heating_option='Isidoro'
    real :: local_heating_ycenter=45.             ! degrees latitude   Used only when local_heating_option='Isidoro'
+   real :: local_heating_sigcenter=0.3           ! []                 Used only when local_heating_option='Wang'
    real :: local_heating_vert_decay=1.e4         ! pascals            Used only when local_heating_option='Isidoro'
 
    logical :: relax_to_specified_wind = .false.
@@ -116,6 +117,7 @@ private
                               trflux, trsink, local_heating_srfamp,          &
                               local_heating_xwidth,  local_heating_ywidth,   &
                               local_heating_xcenter, local_heating_ycenter,  &
+                              local_heating_sigcenter,                       & !mj
                               local_heating_vert_decay, local_heating_option,&
                               local_heating_file, relax_to_specified_wind,   &
                               u_wind_file, v_wind_file, equilibrium_t_option,&
@@ -447,6 +449,7 @@ use     tracer_manager_mod, only: get_tracer_index, NO_TRACER !mj
        call interpolator_init (u_interp,    trim(u_wind_file)//'.nc', lonb, latb, data_out_of_bounds=(/CONSTANT/))
        call interpolator_init (v_interp,    trim(v_wind_file)//'.nc', lonb, latb, data_out_of_bounds=(/CONSTANT/))
      endif
+
 !
 ! mj read Newtonian time scale from file
 !
@@ -454,7 +457,6 @@ use     tracer_manager_mod, only: get_tracer_index, NO_TRACER !mj
         call interpolator_init (tau_interp, trim(equilibrium_tau_file)//'.nc', lonb, latb, data_out_of_bounds=(/CONSTANT/))
      endif
      
-
 
      module_is_initialized  = .true.
 
@@ -594,10 +596,12 @@ real, intent(in),  dimension(:,:,:), optional :: mask
 
 !-----------------------------------------------------------------------
       if(trim(equilibrium_t_option) == 'from_file') then
-         call get_zonal_mean_temp(Time, p_half, tz)
+         !call get_zonal_mean_temp(Time, p_half, tz)
+         call get_temp(Time, p_half, teq)
       endif
       if(trim(equilibrium_tau_option) == 'from_file') then !mj
-         call get_zonal_mean_tau(Time, p_half, tauz)
+         !call get_zonal_mean_tau(Time, p_half, tauz)
+         call get_tau(Time, p_half, tdamp)
       endif
       tcoeff = (tks-tka)/(1.0-sigma_b)
       pref = P00
@@ -612,11 +616,11 @@ real, intent(in),  dimension(:,:,:), optional :: mask
 !  ----- compute equilibrium temperature (teq) -----
 
       if(equilibrium_t_option == 'from_file') then
-         do i=1, size(t,1)
-         do j=1, size(t,2)
-           teq(i,j,k)=tz(j,k)
-         enddo
-         enddo
+!!$         do i=1, size(t,1)
+!!$         do j=1, size(t,2)
+!!$           teq(i,j,k)=tz(j,k)
+!!$         enddo
+!!$         enddo
       else if(trim(equilibrium_t_option) == 'Held_Suarez') then
          p_norm(:,:) = p_full(:,:,k)/pref
          the   (:,:) = t_star(:,:) - delv*cos_lat_2(:,:)*log(p_norm(:,:))
@@ -634,11 +638,11 @@ real, intent(in),  dimension(:,:,:), optional :: mask
 !  ----- compute damping -----
       sigma(:,:) = p_full(:,:,k)*rps(:,:)
       if(trim(equilibrium_tau_option) == 'from_file') then !mj
-         do i=1, size(t,1)
-         do j=1, size(t,2)
-           tdamp(i,j,k)=1./tauz(j,k)
-         enddo
-         enddo
+!!$         do i=1, size(t,1)
+!!$         do j=1, size(t,2)
+!!$           tdamp(i,j,k)=1./tauz(j,k)
+!!$         enddo
+!!$         enddo
       elseif(trim(equilibrium_tau_option) == 'profile') then
          where (sigma(:,:) <= 1.0 .and. sigma(:,:) > sigma_b)
             tfactr(:,:) = tcoeff*(sigma(:,:)-sigma_b)
@@ -670,6 +674,7 @@ real, intent(in),  dimension(:,:,:), optional :: mask
 
 
       enddo
+
 !  ----- add a US_SAT_1976 stratosphere and a polar vortex to teq ----- tjr
       if ( pv_sat_flag ) then
 
@@ -689,7 +694,7 @@ real, intent(in),  dimension(:,:,:), optional :: mask
                   t_sat(:,:) = sat_t(l) * (p_norm(:,:)/sat_p(l))**(-rdgas*sat_g(l)/grav);
                end where
             end do
-!mj change tropical tropopause temperature
+!mj change tropical tropopause temperature - delT*ltcos
             lgpt=log10(p_norm(:,:)/p_tropopause)
             lgp0=log10(p0)
             clarg = 0.5*(1. + cos(2.*lat*90./delth + eps_sc*pif)) ! smoother start, but stronger gradient
@@ -1144,7 +1149,7 @@ real, intent(in),  dimension(:,:,:) :: p_half
 real, intent(out), dimension(:,:,:) :: tdt
 
 integer :: i, j, k
-real :: lon_temp, x_temp, p_factor
+real :: lon_temp, x_temp, p_factor, sig_temp
 real, dimension(size(lon,1),size(lon,2)) :: lon_factor
 real, dimension(size(lat,1),size(lat,2)) :: lat_factor
 real, dimension(size(p_half,1),size(p_half,2),size(p_half,3)) :: p_half2
@@ -1155,7 +1160,8 @@ enddo
 tdt(:,:,:)=0.
 
 if(trim(local_heating_option) == 'from_file') then
-   call interpolator( heating_source_interp, p_half, tdt, trim(local_heating_file))
+   call interpolator( heating_source_interp, Time, p_half, tdt, trim(local_heating_file))
+   tdt = tdt/SECONDS_PER_DAY !mj input file is in deg_K/day
 else if(trim(local_heating_option) == 'Isidoro') then
    do j=1,size(lon,2)
    do i=1,size(lon,1)
@@ -1170,6 +1176,17 @@ else if(trim(local_heating_option) == 'Isidoro') then
        tdt(i,j,k) = srfamp*lon_factor(i,j)*lat_factor(i,j)*p_factor
      enddo
    enddo
+   enddo
+else if(trim(local_heating_option) == 'Wang') then
+   do j=1,size(lon,2)
+      do i=1,size(lon,1)
+         lat_factor(i,j) = exp(-lat(i,j)**2/0.32)
+         do k=1,size(p_full,3)
+            sig_temp = p_full(i,j,k)/ps(i,j)
+            p_factor = exp(-(sig_temp-local_heating_sigcenter)**2/0.0242 )
+            tdt(i,j,k) = srfamp*lat_factor(i,j)*p_factor
+         enddo
+      enddo
    enddo
 else
   call error_mesg ('hs_forcing_nml','"'//trim(local_heating_option)//'"  is not a valid value for local_heating_option',FATAL)
@@ -1221,6 +1238,20 @@ enddo
 end subroutine get_zonal_mean_temp
 !#######################################################################
 
+subroutine get_temp ( Time, p_half, tm)
+
+type(time_type), intent(in)         :: Time
+real, intent(in),  dimension(:,:,:) :: p_half
+real, intent(inout), dimension(:,:,:) :: tm
+
+integer :: j, k
+real, dimension(size(p_half,1),size(p_half,2),size(p_half,3)-1) :: tf
+!call interpolator( temp_interp, p_half, tf, trim(equilibrium_t_file))
+call interpolator( temp_interp, Time, p_half, tm, trim(equilibrium_t_file))
+
+end subroutine get_temp
+!#######################################################################
+
 subroutine get_zonal_mean_tau ( Time, p_half, taum)
 
 type(time_type), intent(in)         :: Time
@@ -1238,6 +1269,20 @@ do k=1,size(p_half,3)-1
 enddo
 enddo
 end subroutine get_zonal_mean_tau
+!#######################################################################
+
+subroutine get_tau ( Time, p_half, taum)
+
+type(time_type), intent(in)         :: Time
+real, intent(in),  dimension(:,:,:) :: p_half
+real, intent(inout), dimension(:,:,:) :: taum
+
+integer :: j, k
+real, dimension(size(p_half,1),size(p_half,2),size(p_half,3)-1) :: tauf
+!call interpolator( tau_interp, p_half, tauf, trim(equilibrium_tau_file))
+call interpolator( tau_interp, Time, p_half, taum, trim(equilibrium_tau_file))
+
+end subroutine get_tau
 !#######################################################################
 
 end module hs_forcing_mod
