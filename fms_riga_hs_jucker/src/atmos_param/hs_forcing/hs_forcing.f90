@@ -95,7 +95,7 @@ private
    logical :: sponge_flag = .true. !flag for sponge at top of model
    real :: sponge_pbottom = 1.e2    !bottom of sponge layer, where damping is zero (Pa)
    real :: sponge_tau_days  = 1.0   !damping time scale for the sponge (days)
-   logical :: sponge_eddies = .true. !mj only damp eddies in sponge layer
+   logical :: sponge_eddies = .false. !mj only damp eddies in sponge layer
    real :: sponge_eddies_days = 1.0  !mj eddies sponge damping time [days]
 
    real :: p_tropopause = 0.1       !tropopause pressure divided by reference pressure
@@ -1181,10 +1181,10 @@ else if(trim(local_heating_option) == 'Isidoro') then
 else if(trim(local_heating_option) == 'Wang') then
    do j=1,size(lon,2)
       do i=1,size(lon,1)
-         lat_factor(i,j) = exp(-lat(i,j)**2/0.32)
+         lat_factor(i,j) = exp( -lat(i,j)**2/(2*0.4**2) )
          do k=1,size(p_full,3)
             sig_temp = p_full(i,j,k)/ps(i,j)
-            p_factor = exp(-(sig_temp-0.3)**2/0.0242 )
+            p_factor = exp(-(sig_temp-local_heating_sigcenter)**2/(2*0.11**2) )
             tdt(i,j,k) = srfamp*lat_factor(i,j)*p_factor
          enddo
       enddo
