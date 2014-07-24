@@ -34,6 +34,15 @@ tau_analytic.m
 
 MATLAB script to compute analytic tau profiles and create the input file tau.nc for the FMS model.
 
+heldsuarez.m / heldsuarez_tau.m
+-------------------------------
+
+MATLAB scripts to compute Held and Suarez (1994) Te and tau profiles. These are used for the troposphere.
+
+polvanikushner.m
+----------------
+
+MATLAB script to compute Polvani and Kushner (2002) stratosphere. Useful to compare to more basic model setup.
 
 writetempin.m
 -------------
@@ -46,7 +55,7 @@ writetauin.m
 MATLAB script to create the needed netCDF file for the GCM. Same functioning as writetempin.m. tauin can come from tau_analytic.m, or any other source (e.g. tau_monthly_L10_full.nc)
 
 
-temp/tau_monthly_L10_full.nc
+temp / tau_monthly_L10_full.nc
 ----------------------------
 
 Example files for non-analytic Newtonian cooling profiles. These files come from work described in
