@@ -171,6 +171,7 @@ integer, intent(in) :: previous, current, future
 real,    intent(in) :: delta_t, robert_coeff
 !--mj, passing from RA to RAW filter, Williams Monthly Weather Review 2011 ------
 real,    parameter :: alpha=0.5
+logical            :: use_raw=.false.
 complex, dimension(size(dt_a,1),size(dt_a,2),size(dt_a,3)) :: D
 !--------------------------------------------------------------------------------
 
@@ -179,19 +180,29 @@ if(.not.entry_to_logfile_done) then
   entry_to_logfile_done = .true.
 endif
 
-D(:,:,:) = robert_coeff*(a(:,:,:,previous) - 2.0*a(:,:,:,current) + a(:,:,:,future)) !mj
+!*****  mj RAW
+if (use_raw) then
+   D(:,:,:) = robert_coeff*(a(:,:,:,previous) - 2.0*a(:,:,:,current) + a(:,:,:,future)) !mj
 
-if(previous == current) then
-  a(:,:,:,future ) = a(:,:,:,previous) + delta_t*dt_a
-!mj  a(:,:,:,current) = a(:,:,:,current ) + robert_coeff*(a(:,:,:,previous) - 2.0*a(:,:,:,current) + a(:,:,:,future ))
-  a(:,:,:,current) = a(:,:,:,current ) + alpha      *D !mj
-  a(:,:,:,future ) = a(:,:,:,future  ) + (alpha-1.0)*D !mj
+   if(previous == current) then
+      a(:,:,:,future ) = a(:,:,:,previous) + delta_t*dt_a
+      a(:,:,:,current) = a(:,:,:,current ) + alpha      *D
+      a(:,:,:,future ) = a(:,:,:,future  ) + (alpha-1.0)*D 
+   else
+      a(:,:,:,future ) = a(:,:,:,previous) + delta_t*dt_a
+      a(:,:,:,current) = a(:,:,:,current ) + alpha      *D
+      a(:,:,:,future ) = a(:,:,:,future  ) + (alpha-1.0)*D
+   endif
+!***** mj non-RAW (FMS)
 else
-!mj  a(:,:,:,current) = a(:,:,:,current ) + robert_coeff*(a(:,:,:,previous) - 2.0*a(:,:,:,current))
-  a(:,:,:,future ) = a(:,:,:,previous) + delta_t*dt_a
-!mj  a(:,:,:,current) = a(:,:,:,current ) + robert_coeff*a(:,:,:,future)
-  a(:,:,:,current) = a(:,:,:,current ) + alpha      *D !mj
-  a(:,:,:,future ) = a(:,:,:,future  ) + (alpha-1.0)*D !mj
+   if(previous == current) then
+      a(:,:,:,future ) = a(:,:,:,previous) + delta_t*dt_a
+      a(:,:,:,current) = a(:,:,:,current ) + robert_coeff*(a(:,:,:,previous) - 2.0*a(:,:,:,current) + a(:,:,:,future ))
+   else
+      a(:,:,:,current) = a(:,:,:,current ) + robert_coeff*(a(:,:,:,previous) - 2.0*a(:,:,:,current))
+      a(:,:,:,future ) = a(:,:,:,previous) + delta_t*dt_a
+      a(:,:,:,current) = a(:,:,:,current ) + robert_coeff*a(:,:,:,future)
+   endif
 endif
 
 return
