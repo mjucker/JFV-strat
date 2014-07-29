@@ -140,9 +140,6 @@ real,    intent(in) :: current_dt
 complex, intent(inout), dimension(ms:me, ns:ne, num_levels) :: dt_vor
 
 real, dimension(ms:me, ns:ne) :: coeff
-real    :: coeff_sponge !mj add multiplayer sponge
-integer :: sponge_level !mj
-parameter(sponge_level=6) !mj first level where sponge absent
 
 integer :: k, m, n
 
@@ -154,28 +151,23 @@ coeff = 1.0/(1.0 + damping_vor(ms:me,ns:ne)*current_dt)
 
 do k = 1, size(vor,3)
   dt_vor(:,:,k) = coeff * (dt_vor(:,:,k) - damping_vor(ms:me,ns:ne)*vor(:,:,k))
-
-  if(k.le.sponge_level)then
-
-     do n=ns,ne
-        do m=ms,me
-           if(m /= 0) then
-              coeff_sponge = damping_eddy_sponge(m,n)*((sponge_level-k)/(sponge_level-1.0))**2.
-              dt_vor(m,n,k) = (dt_vor(m,n,k) - coeff_sponge*vor(m,n,k))/(1. + coeff_sponge*current_dt)
-           endif
-        enddo
-     enddo
-
-     if(ms == 0) then
-        do n=ns,ne
-           coeff_sponge = damping_zmu_sponge(n)*((sponge_level-k)/(sponge_level-1.0))**2.
-           dt_vor(0,n,k) = (dt_vor(0,n,k) - coeff_sponge*vor(0,n,k))/(1. + coeff_sponge*current_dt)
-        enddo
-     endif
-
-  endif
-
 end do
+
+do n=ns,ne
+   do m=ms,me
+      if(m /= 0) then
+         dt_vor(m,n,1) = (dt_vor(m,n,1) - damping_eddy_sponge(m,n)*vor(m,n,1))/(1. + damping_eddy_sponge(m,n)*current_dt)
+      endif
+   enddo
+enddo
+
+if(ms == 0) then
+   do n=ns,ne
+      dt_vor(0,n,1) = (dt_vor(0,n,1) - damping_zmu_sponge(n)*vor(0,n,1))/(1. + damping_zmu_sponge(n)*current_dt)
+   enddo
+endif
+
+
 return
 end subroutine compute_spectral_damping_vor
 !-----------------------------------------------------------------
