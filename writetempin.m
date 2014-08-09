@@ -1,4 +1,4 @@
-function writetempin(latin,pin,days,Tin,T_strat,epsS,epsN,p_hsin,p_bdin,filename,directory)
+function writetempin(latin,pin,days,Tin,T_strat,epsS,epsN,p_hsin,p_bdin,filename,basefile)
 % writes given 3D (latitude x pressure x time) temperature profile into
 % netCDF format to be used as input to the FMS Newtonian cooling model
 %
@@ -16,8 +16,7 @@ function writetempin(latin,pin,days,Tin,T_strat,epsS,epsN,p_hsin,p_bdin,filename
 %   for p_bdin < p < p_hsin, linear interpolation between the two
 % GENERAL:
 % filename: Output file name. As code input, must be called [dir]/temp.nc
-% directory: directory containing file 'atmos_average.nc' to read FMS
-%   dimensions from. If empty, use default T42 grid
+% basefile:  FMS-like file to read output grid. If empty, use input grid
 %
 % Routine written by Martin Jucker, please make reference to M. Jucker, S.
 % Fueglistaler, and G.K. Vallis (2013): "Maintenance of the Stratospheric Structure in an
@@ -25,35 +24,41 @@ function writetempin(latin,pin,days,Tin,T_strat,epsS,epsN,p_hsin,p_bdin,filename
 
 
 %be sure inputs are in the shape we need
+if(length(pin) ~= size(Tin,2))
+    Tin = permute(Tin,[2,1,3]);
+end
 if(pin(end)<pin(1))
     pin = pin(end:-1:1);
     Tin = Tin(:,end:-1:1,:);
 end
 latin=latin(:);pin=pin(:);
-
 grav = 9.81;
 Rd   = 287.04;
-T_range = [50,400]; 
+T_range = [100,400]; 
 
 
 %% read fms dimensions and interpolate Teq onto them (if file exists)
-if( exist('directory','var') && exist([directory,'/atmos_average.nc'],'file') )
-    file=[directory,'/atmos_average_pfull.nc'];
+if( exist('basefile','var') )
+    if( exist(basefile,'file') )
 
-    ncid = netcdf.open(file,'NC_NOWRITE');
-    varid = netcdf.inqVarID(ncid,'lon');
-    lon=netcdf.getVar(ncid,varid);
-    varid = netcdf.inqVarID(ncid,'lonb');
-    lonb=netcdf.getVar(ncid,varid);
-    varid = netcdf.inqVarID(ncid,'lat');
-    lat=netcdf.getVar(ncid,varid);
-    varid = netcdf.inqVarID(ncid,'latb');
-    latb=netcdf.getVar(ncid,varid);
-    varid = netcdf.inqVarID(ncid,'pfull');
-    pfull=netcdf.getVar(ncid,varid);
-    varid = netcdf.inqVarID(ncid,'phalf');
-    phalf=netcdf.getVar(ncid,varid);
-    netcdf.close(ncid);
+        ncid = netcdf.open(basefile,'NC_NOWRITE');
+        varid = netcdf.inqVarID(ncid,'lon');
+        lon=netcdf.getVar(ncid,varid);
+        varid = netcdf.inqVarID(ncid,'lonb');
+        lonb=netcdf.getVar(ncid,varid);
+        varid = netcdf.inqVarID(ncid,'lat');
+        lat=netcdf.getVar(ncid,varid);
+        varid = netcdf.inqVarID(ncid,'latb');
+        latb=netcdf.getVar(ncid,varid);
+        varid = netcdf.inqVarID(ncid,'pfull');
+        pfull=netcdf.getVar(ncid,varid);
+        varid = netcdf.inqVarID(ncid,'phalf');
+        phalf=netcdf.getVar(ncid,varid);
+        netcdf.close(ncid);
+    else
+        disp(['The file ',basefile,' does not exist! Have to stop here'])
+        return
+    end
 else
     dummy=linspace(0,360,3);lon=dummy(1:end-1)';
     lonb=dummy-0.5*dummy(2)';

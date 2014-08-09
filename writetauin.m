@@ -1,4 +1,4 @@
-function writetauin(latin,pin,days,tauin,tau_strat,p_hsin,p_bdin,filename,directory)
+function writetauin(latin,pin,days,tauin,tau_strat,p_hsin,p_bdin,filename,basefile)
 % writes given 3D (latitude x pressure x time) relaxation time profile into
 % netCDF format to be used as input to the FMS Newtonian cooling model
 %
@@ -15,12 +15,24 @@ function writetauin(latin,pin,days,tauin,tau_strat,p_hsin,p_bdin,filename,direct
 %   for p_bdin < p < p_hsin, linear interpolation between the two
 % GENERAL:
 % filename: Output file name. As code input, must be called [dir]/tau.nc
-% directory: directory containing file 'atmos_average.nc' to read FMS
-%   dimensions from. If empty, use default T42 grid
+% basefile:  FMS-like file to read output grid. If empty, use input grid
 %
 % Routine written by Martin Jucker, please make reference to M. Jucker, S.
 % Fueglistaler, and G.K. Vallis (2013): "Maintenance of the Stratospheric Structure in an
 %   Idealized General Circulation Model", J. Atmos. Sci. 70, 3341. DOI: 10.1175/JAS-D-12-0305.1
+
+%be sure inputs are in the shape we need
+if(length(pin) ~= size(tauin,2))
+    tauin = permute(tauin,[2,1,3]);
+end
+if(pin(end)<pin(1))
+    pin = pin(end:-1:1);
+    tauin = tauin(:,end:-1:1,:);
+end
+latin=latin(:);pin=pin(:);
+if(length(pin) ~= size(tauin,2))
+    tauin = permute(tauin,[2,1,3]);
+end
 
 grav = 9.81;
 Rd   = 287.04;
@@ -28,24 +40,29 @@ secperday = 86400;
 
 
 %% read fms dimensions and interpolate tau onto them
-if(exist('directory','var') && exist([directory,'/atmos_average.nc'],'file'))
-    file=[directory,'/atmos_average_pfull.nc'];
+if( exist('basefile','var') )
+    if( exist(basefile,'file') )
 
-    ncid = netcdf.open(file,'NC_NOWRITE');
-    varid = netcdf.inqVarID(ncid,'lon');
-    lon=netcdf.getVar(ncid,varid);
-    varid = netcdf.inqVarID(ncid,'lonb');
-    lonb=netcdf.getVar(ncid,varid);
-    varid = netcdf.inqVarID(ncid,'lat');
-    lat=netcdf.getVar(ncid,varid);
-    varid = netcdf.inqVarID(ncid,'latb');
-    latb=netcdf.getVar(ncid,varid);
-    varid = netcdf.inqVarID(ncid,'pfull');
-    pfull=netcdf.getVar(ncid,varid);
-    varid = netcdf.inqVarID(ncid,'phalf');
-    phalf=netcdf.getVar(ncid,varid);
+        ncid = netcdf.open(basefile,'NC_NOWRITE');
+        varid = netcdf.inqVarID(ncid,'lon');
+        lon=netcdf.getVar(ncid,varid);
+        varid = netcdf.inqVarID(ncid,'lonb');
+        lonb=netcdf.getVar(ncid,varid);
+        varid = netcdf.inqVarID(ncid,'lat');
+        lat=netcdf.getVar(ncid,varid);
+        varid = netcdf.inqVarID(ncid,'latb');
+        latb=netcdf.getVar(ncid,varid);
+        varid = netcdf.inqVarID(ncid,'pfull');
+        pfull=netcdf.getVar(ncid,varid);
+        pfull=pfull(:)';
+        varid = netcdf.inqVarID(ncid,'phalf');
+        phalf=netcdf.getVar(ncid,varid);
 
-    netcdf.close(ncid);
+        netcdf.close(ncid);
+    else
+        disp(['The file ',basefile,' does not exist! Have to stop here'])
+        return
+    end
 else
     dummy=linspace(0,360,3);lon=dummy(1:end-1)';
     lonb=dummy-0.5*dummy(2)';
@@ -74,19 +91,7 @@ tdamp = zeros(length(lon),length(lat),length(pfull),t_length);
 
 %% compute Held-Suarez tau
 
-ka=1/tau_strat;
-ks=1/4;
-p0=1e3;
-sigma=pfull/p0;
-sigmab=0.7;
-
-kv = (ks-ka)*max(0,(sigma-sigmab)/(1-sigmab));
-
-tauhs=zeros(length(lat),length(pfull));
-for k=1:length(pfull)
-    kT = ka + kv(k)*cos(lat*pi/180).^4;
-    tauhs(:,k) = 1./kT;
-end
+tauhs = heldsuarez_tau('',tau_strat,lat,pfull);
 
 %% interpolate inputs onto code grid
 tau  = zeros(length(lat),length(pfull),t_length);  
@@ -142,7 +147,7 @@ for d=1:t_length
             tdamp(i,j,I,d) = tauhs(j,I);
             J=find(pfull <= p_hs(j,d) & pfull > p_bd(j,d));
             beta = (pfull(J)-p_hs(j,d))/(p_bd(j,d)-p_hs(j,d));
-            tdamp(i,j,J,d) = beta'.*tau(j,J,d) + (1-beta').*tauhs(j,J);
+            tdamp(i,j,J,d) = beta.*tau(j,J,d) + (1-beta).*tauhs(j,J);
         end
     end
 end

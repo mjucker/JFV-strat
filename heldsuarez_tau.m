@@ -1,11 +1,10 @@
-function [tau,lat,pfull]=heldsuarez_tau(directory,k_strat,lat,pfull)
+function [tau,lat,pfull]=heldsuarez_tau(basefile,k_strat,lat,pfull)
 
 
     
 %% read fms dimensions and interpolate tau onto them
-if(length(directory)>0)
-    filename=[directory,'/atmos_average_pfull.nc'];
-    ncid = netcdf.open(filename,'NC_NOWRITE');
+if(length(basefile)>0)
+    ncid = netcdf.open(basefile,'NC_NOWRITE');
     varid = netcdf.inqVarID(ncid,'lat');
     lat=netcdf.getVar(ncid,varid);
     varid = netcdf.inqVarID(ncid,'pfull');
