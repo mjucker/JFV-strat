@@ -78,8 +78,8 @@ end
 
 t_length=size(tauin,3);
 if(~exist('days','var'))
-    dayint = 360/t_length;
-    days   = dayint/2:dayint:360;
+    dayint = 365/t_length;
+    days   = dayint/2:dayint:365;
 else
     if(length(days)~=t_length)
         'length of days must be equal length of input tau'
