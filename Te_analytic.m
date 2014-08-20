@@ -86,8 +86,8 @@ AS(:,II) = AS(:,II(end)+1)*ones(size(II))'; % choice B: constant amplitude above
 
 Te0 = zeros(size(Te,1),size(Te,2),t_length); %this will be the stratospheric Te
  for d=1:t_length  
-    cosNH = cos(2*pi*(days(d))/365); %days(d)-349 for realistic solstice
-    cosSH = cos(2*pi*(days(d))/365); %days(d)-166.5 for realistic solstice
+    cosNH = cos(2*pi*(days(d      ))/365); %days(d)-349 for realistic solstice, but needs change in Held-Suarez as well
+    cosSH = cos(2*pi*(days(d-182.5))/365); %days(d)-166.5 for realistic solstice
     if(cosNH>0)
         Te0(NH,:,d) = Te(NH,:).*P(NH,:) + A(NH,:)*cosNH;
     else
