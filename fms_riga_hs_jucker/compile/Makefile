@@ -1,7 +1,6 @@
-# Makefile for Experiment 'HSt42'
 include intel.mk
 
-fms_HSt42.x: libfms_spectral_solo.a
+jfv_hs.x: libfms_spectral_solo.a
 	$(LD) $^ $(LDFLAGS) -o $@ 
 
 libfms_spectral_solo.a:  FORCE
