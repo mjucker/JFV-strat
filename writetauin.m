@@ -8,9 +8,9 @@ function writetauin(latin,pin,days,tauin,tau_strat,p_hsin,p_bdin,filename,basefi
 % tauin: Relaxation time profiles on latin x pin x days grid
 % Held-Suarez:
 % tau_strat: maximum tau for Held-Suarez (1994) tropospheric tau [days]. Good value: 40
-% p_hsin: for pressures above p_hsin [hPa, size latin x days], Held-Suarez
+% p_hsin: for pressures above p_hsin [hPa, scalar or size latin x days], Held-Suarez
 %   is used. Standard: 100hPa
-% p_bdin: for pressures below p_bdin [hPa, size latin x days], Tin is used.
+% p_bdin: for pressures below p_bdin [hPa, scalar or size latin x days], Tin is used.
 %   standard: 100hPa
 %   for p_bdin < p < p_hsin, linear interpolation between the two
 % GENERAL:
@@ -32,6 +32,12 @@ end
 latin=latin(:);pin=pin(:);
 if(length(pin) ~= size(tauin,2))
     tauin = permute(tauin,[2,1,3]);
+end
+if(length(p_hsin) == 1)
+    p_hsin = p_hsin*ones(length(latin),length(days));
+end
+if(length(p_bdin) == 1)
+    p_bdin = p_bdin*ones(length(latin),length(days));
 end
 
 grav = 9.81;
