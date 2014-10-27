@@ -49,6 +49,7 @@ private
    logical :: surface_forcing_input = .false.
 
    real :: t_zero=315., t_strat=200., delh=60., delv=10., eps=10., sigma_b=0.7
+
    real :: P00 = 1.e5
    real :: eps_sc !mj eps in seasonal cycle
 
@@ -74,10 +75,10 @@ private
    logical :: relax_to_specified_wind = .false.
    character(len=256) :: u_wind_file='u', v_wind_file='v' ! Name of files relative to $work/INPUT  Used only when relax_to_specified_wind=.true.
 
-   character(len=256) :: equilibrium_t_option = 'Held_Suarez'
+   character(len=256) :: equilibrium_t_option = 'Held_Suarez' ! mj 'Held_Suarez', 'JFV', 'from_file', 'strat_file'
    character(len=256) :: equilibrium_t_file='temp'  ! Name of file relative to $work/INPUT  Used only when equilibrium_t_option='from_file'
-   character(len=256) :: equilibrium_tau_option='Held_Suarez' !mj: choose 'Held-Suarez','profile','from_file'
-   character(len=256) :: equilibrium_tau_file='tau'  ! Name of file relative to $work/INPUT  Used only when equilibrium_tau_option='from_file'
+   character(len=256) :: equilibrium_tau_option='Held_Suarez' !mj: 'Held-Suarez','JFV','from_file', 'strat_file'
+   character(len=256) :: equilibrium_tau_file='tau'  ! Name of file relative to $work/INPUT  Used only when equilibrium_tau_option='from_file' or 'strat_file'
 
 !
 !  standard atmosphere (sat), polar vortex (pv) and TOA sponge layer tjr
@@ -88,15 +89,9 @@ private
    real :: pv_dphi  = 10.    !  polar vortex edge width (in degrees)
    real :: pv_gamma = -1.e-3 !  polar vortex lapse rate (in degK/m)
 !
-!  use vertical polynomial damping time profile mj
-!
-   real :: k0 =1.,k1=0.,k2=0.,k3=0.,k4=0.,k5=0.
-!
    logical :: sponge_flag = .true. !flag for sponge at top of model
    real :: sponge_pbottom = 1.e2    !bottom of sponge layer, where damping is zero (Pa)
    real :: sponge_tau_days  = 1.0   !damping time scale for the sponge (days)
-   logical :: sponge_eddies = .false. !mj only damp eddies in sponge layer
-   real :: sponge_eddies_days = 1.0  !mj eddies sponge damping time [days]
 
    real :: p_tropopause = 0.1       !tropopause pressure divided by reference pressure
 
@@ -107,8 +102,13 @@ private
 
    logical :: sc_flag = .false. ! flag for seasonal cycle in stratospheric te
    real ::  sc_phi0n,sc_phi0s,sc_dphin,sc_dphis !generalizations, for seasonal cycle option, of pv_phi0 and pv_dphi above
-   real :: delT=-00.00,p0=0.4,delth=30 ! mj correction of T_tropopause in T_eq
-   
+
+!-------------- Jucker et al JGR (2014) background ---------------------
+   real :: p_hs=250.e2,p_bd=100.e2   ! boundaries for transition from Held_Suarez to JFV stratosphere
+   real :: A_NH_0=15, A_NH_1=45, A_SH_0=25, A_SH_1=60, A_s=15, phi_N=80, phi_S=-80 ! stratospheric polar temperature amplitdues
+   real :: tau_t=40, tau_N_p=20, tau_S_p=20, delta_phi=30, tau_m=5 ! stratospheric relaxation time setup (tropics, northpole, southpole)
+   logical :: do_seasonal_cycle=.false.  !add seasonal cycle in stratosphere?
+   real :: days_per_year=365             !for determining seasonal cycle
 !-----------------------------------------------------------------------
 
    namelist /hs_forcing_nml/  no_forcing, surface_forcing_input,             &
@@ -127,14 +127,15 @@ private
                               p_tropopause,scaife_damp, scaife_flag,         &  ! hmchen
                               sigma_strat1,sigma_strat2,k_strat,             &  ! tjr
                               sc_flag,sc_phi0n,sc_phi0s,sc_dphin,sc_dphis,   &
-                              sat_only_flag,delT,p0,delth,                   &  !mj
-                              k0,k1,k2,k3,k4,k5,                             &  !mj
+                              sat_only_flag,                                 &  !mj
                               equilibrium_tau_option,equilibrium_tau_file,   &  !mj
-                              sponge_eddies,sponge_eddies_days                  !mj
+                              p_hs,p_bd,A_NH_0,A_NH_1,A_SH_0,A_SH_1,A_s,     &  !mj
+                              phi_N,phi_S,tau_t,tau_N_p,tau_S_p,delta_phi,   &  !mj
+                              tau_m,do_seasonal_cycle,days_per_year             !mj
 
 !-----------------------------------------------------------------------
 
-   character(len=128) :: version='$Id: hs_forcing.f90, 2012/05/24 mj $'
+   character(len=128) :: version='$Id: hs_forcing.f90, 2014/10/24 mj $'
    character(len=128) :: tagname='$Name: riga_201012 $'
 
    real :: tka, tks, vkf
@@ -142,7 +143,7 @@ private
    real :: trdamp, twopi
    real :: tk_strat
 
-   integer :: id_teq, id_tdt, id_udt, id_vdt, id_tdt_diss, id_diss_heat, id_local_heating, id_newtonian_damping
+   integer :: id_teq, id_tau, id_tdt, id_udt, id_vdt, id_tdt_diss, id_diss_heat, id_local_heating, id_newtonian_damping
    real    :: missing_value = -1.e10
    real    :: xwidth, ywidth, xcenter, ycenter ! namelist values converted from degrees to radians
    real    :: srfamp ! local_heating_srfamp converted from deg/day to deg/sec
@@ -179,7 +180,7 @@ use     tracer_manager_mod, only: get_tracer_index, NO_TRACER !mj
    integer, intent(in),    dimension(:,:)  , optional :: kbot
 !-----------------------------------------------------------------------
    real, dimension(size(t,1),size(t,2))           :: ps, diss_heat, surface_forcing
-   real, dimension(size(t,1),size(t,2),size(t,3)) :: ttnd, utnd, vtnd, teq, pmass
+   real, dimension(size(t,1),size(t,2),size(t,3)) :: ttnd, utnd, vtnd, teq, tau, pmass
    real, dimension(size(r,1),size(r,2),size(r,3)) :: rst, rtnd, vort
    real, dimension(size(r,1),size(r,2),size(r,3)) :: tst, pvt !mj
    integer :: i, j, k, kb, n, num_tracers
@@ -234,7 +235,7 @@ use     tracer_manager_mod, only: get_tracer_index, NO_TRACER !mj
 
 !-----------------------------------------------------------------------
 !     thermal forcing for held & suarez (1994) benchmark calculation
-      call newtonian_damping ( Time, lat, ps, p_full, p_half, t, ttnd, teq, mask,surface_forcing,delT,delth,p0 ) !mj
+      call newtonian_damping ( Time, lat, ps, p_full, p_half, t, ttnd, teq, tau, mask,surface_forcing )
 
       tdt = tdt + ttnd
       if (id_newtonian_damping > 0) used = send_data(id_newtonian_damping, ttnd, Time, is, js)
@@ -247,6 +248,7 @@ use     tracer_manager_mod, only: get_tracer_index, NO_TRACER !mj
 
       if (id_tdt > 0) used = send_data ( id_tdt, tdt, Time, is, js)
       if (id_teq > 0) used = send_data ( id_teq, teq, Time, is, js)
+      if (id_tau > 0) used = send_data ( id_tau, tau, Time, is, js)
 
 !-----------------------------------------------------------------------
 !     -------- tracers -------
@@ -345,8 +347,10 @@ use     tracer_manager_mod, only: get_tracer_index, NO_TRACER !mj
   10     call close_file (unit)
       endif
 #endif
-
-     if(trim(equilibrium_t_option) == 'from_file')then
+!mj make sure we don't have conflicting choices
+     if(trim(equilibrium_t_option) == 'from_file' .or. &
+        &trim(equilibrium_t_option) == 'JFV' .or. &
+        &trim(equilibrium_t_option) == 'strat_file' )then
         pv_sat_flag=.false.
         sat_only_flag=.false.
      endif
@@ -404,8 +408,12 @@ use     tracer_manager_mod, only: get_tracer_index, NO_TRACER !mj
 !     ----- register diagnostic fields -----
 
       id_teq = register_diag_field ( mod_name, 'teq', axes(1:3), Time, &
-                      'equilibrium temperature (deg K)', 'deg_K'   , &
+                      'equilibrium temperature', 'deg_K'   , &
                       missing_value=missing_value, range=(/50.,400./) )
+
+      id_tau = register_diag_field ( mod_name, 'tau', axes(1:3), Time, &
+                      'Newtonian cooling damping time', 'days'   , &
+                      missing_value=missing_value      )
 
       id_newtonian_damping = register_diag_field ( mod_name, 'tdt_ndamp', axes(1:3), Time, &
                       'Heating due to newtonian damping (deg/sec)', 'deg/sec' ,    &
@@ -442,7 +450,8 @@ use     tracer_manager_mod, only: get_tracer_index, NO_TRACER !mj
      if(trim(local_heating_option) == 'from_file') then
        call interpolator_init(heating_source_interp, trim(local_heating_file)//'.nc', lonb, latb, data_out_of_bounds=(/CONSTANT/))
      endif
-     if(trim(equilibrium_t_option) == 'from_file') then
+     if(trim(equilibrium_t_option) == 'from_file' .or. &
+          &trim(equilibrium_t_option) == 'strat_file' ) then
        call interpolator_init (temp_interp, trim(equilibrium_t_file)//'.nc', lonb, latb, data_out_of_bounds=(/CONSTANT/))
      endif
      if(relax_to_specified_wind) then
@@ -453,7 +462,8 @@ use     tracer_manager_mod, only: get_tracer_index, NO_TRACER !mj
 !
 ! mj read Newtonian time scale from file
 !
-     if(trim(equilibrium_tau_option) == 'from_file' ) then
+     if(trim(equilibrium_tau_option) == 'from_file' .or. &
+          &trim(equilibrium_tau_option) == 'strat_file' ) then
         call interpolator_init (tau_interp, trim(equilibrium_tau_file)//'.nc', lonb, latb, data_out_of_bounds=(/CONSTANT/),vert_interp=(/INTERP_LINEAR_P/))
      endif
      
@@ -477,11 +487,13 @@ use     tracer_manager_mod, only: get_tracer_index, NO_TRACER !mj
    call interpolator_end(heating_source_interp)
  endif
 
- if(trim(equilibrium_t_option) == 'from_file') then
+ if(trim(equilibrium_t_option) == 'from_file' .or. &
+      &trim(equilibrium_t_option) == 'strat_file' ) then
    call interpolator_end(temp_interp)
  endif
 
- if(trim(equilibrium_tau_option) == 'from_file') then
+ if(trim(equilibrium_tau_option) == 'from_file' .or. &
+      &trim(equilibrium_tau_option) == 'strat_file' ) then
    call interpolator_end(tau_interp)
  endif
 
@@ -497,7 +509,7 @@ use     tracer_manager_mod, only: get_tracer_index, NO_TRACER !mj
 
 !#######################################################################
 
- subroutine newtonian_damping ( Time, lat, ps, p_full, p_half, t, tdt, teq, mask,surface_forcing,delT,delth,p0) !mj
+ subroutine newtonian_damping ( Time, lat, ps, p_full, p_half, t, tdt, teq, tau, mask, surface_forcing )
 !-----------------------------------------------------------------------
 !
 !   routine to compute thermal forcing for held & suarez (1994)
@@ -506,10 +518,9 @@ use     tracer_manager_mod, only: get_tracer_index, NO_TRACER !mj
 !-----------------------------------------------------------------------
 
 type(time_type), intent(in)         :: Time
-real, intent(in)                    :: delT,delth,p0 !mj
 real, intent(in),  dimension(:,:)   :: lat, ps, surface_forcing
 real, intent(in),  dimension(:,:,:) :: p_full, t, p_half
-real, intent(out), dimension(:,:,:) :: tdt, teq
+real, intent(out), dimension(:,:,:) :: tdt, teq, tau
 real, intent(in),  dimension(:,:,:), optional :: mask
 
 !-----------------------------------------------------------------------
@@ -558,12 +569,15 @@ real, intent(in),  dimension(:,:,:), optional :: mask
    real :: t0n,t0s,t_days,en,es
    integer :: days,seconds
    integer :: hits
-!-------------------------mj changing tropical tropopause temp----------
-   real :: lgp0
-   real, dimension(size(lat,1),size(lat,2)) :: lgpt,ltcos,clarg
-! from namelist: delth [degrees], latitudinal extent of temperature vatiation
-!                p0 [p_tropopause], < 1, defines upper boundary of temperature variation
-!                delT [K], temperature variation
+!-------------------------mj Jucker et al (2014) stratosphere ----------
+   real                                          :: p_t=100.e2,p_1=1.e2
+   real                                          :: p_n,phipi_N,phipi_S&
+        &,delta_phipi
+   real                                          :: logphs,logpbd
+   real,dimension(size(t,1),size(t,2))           :: P1,P2,P3,P4,Aw,As,D
+   real,dimension(size(t,1),size(t,2),size(t,3)) :: Pp
+   real,dimension(size(t,1),size(t,2),size(t,3)) :: teq_strat, tau_strat
+!   logical,dimension(size(t,1),size(t,2),size(t,3)) :: msk
 !-----------------------------------------------------------------------
 !------------latitudinal constants--------------------------------------
 
@@ -589,21 +603,12 @@ real, intent(in),  dimension(:,:,:), optional :: mask
 
       t_star(:,:) = t_zero - delh*sin_lat_2(:,:) - eps_sc*sin_lat(:,:)
       if ( .not. pv_sat_flag) then
-         tstr  (:,:) = t_strat - eps_sc*sin_lat(:,:)
+         tstr  (:,:) = t_strat 
       else
          tstr  (:,:) = t_tropopause
       endif
 
 !-----------------------------------------------------------------------
-      if(trim(equilibrium_t_option) == 'from_file') then
-         !call get_zonal_mean_temp(Time, p_half, tz)
-         call get_temp(Time, p_half, teq)
-      endif
-      if(trim(equilibrium_tau_option) == 'from_file') then !mj
-         !call get_zonal_mean_tau(Time, p_half, tauz)
-         call get_tau(Time, p_half, tdamp)
-         tdamp = 1./tdamp !tdamp is damping rate, not time
-      endif
       tcoeff = (tks-tka)/(1.0-sigma_b)
       pref = P00
       rps  = 1./ps
@@ -614,49 +619,31 @@ real, intent(in),  dimension(:,:,:), optional :: mask
 
       do k = 1, size(t,3)
 
-!  ----- compute equilibrium temperature (teq) -----
-
-      if(equilibrium_t_option == 'from_file') then
-!!$         do i=1, size(t,1)
-!!$         do j=1, size(t,2)
-!!$           teq(i,j,k)=tz(j,k)
-!!$         enddo
-!!$         enddo
-      else if(trim(equilibrium_t_option) == 'Held_Suarez') then
+!  ----- compute equilibrium temperature (teq) ----- !mj troposphere
+      if(trim(equilibrium_t_option) == 'Held_Suarez' .or. trim(equilibrium_t_option) == 'JFV' .or. trim(equilibrium_t_option) == 'strat_file' ) then
          p_norm(:,:) = p_full(:,:,k)/pref
          the   (:,:) = t_star(:,:) - delv*cos_lat_2(:,:)*log(p_norm(:,:))
          teq(:,:,k) = the(:,:)*(p_norm(:,:))**KAPPA
          teq(:,:,k) = max( teq(:,:,k), tstr(:,:) )
+      else if(equilibrium_t_option == 'from_file') then !mj
+         call get_temp(Time, p_half, teq)
       else if(trim(equilibrium_t_option) == 'Constant') then
       	 the(:,:) = t_zero
-	 teq(:,:,k) = the(:,:) - delh*abs(lat(:,:))/maxval(abs(lat(:,:)))
-	 teq(:,:,k) = max( teq(:,:,k), tstr(:,:) )
+         teq(:,:,k) = the(:,:) - delh*abs(lat(:,:))/maxval(abs(lat(:,:)))
+         teq(:,:,k) = max( teq(:,:,k), tstr(:,:) )
       else
          call error_mesg ('hs_forcing_nml', &
          '"'//trim(equilibrium_t_option)//'"  is not a valid value for equilibrium_t_option',FATAL)
       endif
 
-!  ----- compute damping -----
+!  ----- compute damping ----- !mj this is the troposphere
       sigma(:,:) = p_full(:,:,k)*rps(:,:)
       if(trim(equilibrium_tau_option) == 'from_file') then !mj
-!!$         do i=1, size(t,1)
-!!$         do j=1, size(t,2)
-!!$           tdamp(i,j,k)=1./tauz(j,k)
-!!$         enddo
-!!$         enddo
-      elseif(trim(equilibrium_tau_option) == 'profile') then
-         where (sigma(:,:) <= 1.0 .and. sigma(:,:) > sigma_b)
-            tfactr(:,:) = tcoeff*(sigma(:,:)-sigma_b)
-            tdamp(:,:,k) = tka + cos_lat_4(:,:)*tfactr(:,:)
-         elsewhere(sigma_strat1 <= sigma(:,:) .and. sigma(:,:) < sigma_b )
-            tdamp(:,:,k) = tka
-         elsewhere(sigma_strat2 <= sigma(:,:) .and. sigma(:,:) < sigma_strat1)
-            tfactr(:,:) = tcoeff_strat * (sigma(:,:) - sigma_strat2)
-            tdamp(:,:,k) = tk_strat + tfactr(:,:)
-         elsewhere
-            tdamp(:,:,k) = tk_strat*(k0 + k1*p_full(:,:,k) + k2*p_full(:,:,k)**2 + k3*p_full(:,:,k)**3 + k4*p_full(:,:,k)**4 + k5*p_full(:,:,k)**5)
-         endwhere
-      elseif(trim(equilibrium_tau_option) == 'Held_Suarez')then
+         call get_tau(Time, p_half, tdamp)
+         tdamp = 1./tdamp !tdamp is damping rate, not time
+      elseif(trim(equilibrium_tau_option) == 'Held_Suarez'.or. &
+        &trim(equilibrium_tau_option) == 'JFV' .or. &
+        &trim(equilibrium_tau_option) == 'strat_file' )then
          where (sigma(:,:) <= 1.0 .and. sigma(:,:) > sigma_b)
             tfactr(:,:) = tcoeff*(sigma(:,:)-sigma_b)
             tdamp(:,:,k) = tka + cos_lat_4(:,:)*tfactr(:,:)
@@ -680,8 +667,6 @@ real, intent(in),  dimension(:,:,:), optional :: mask
       if ( pv_sat_flag ) then
 
          if (sc_flag) then
-!mj already for eps            es = max(0.0,sin((t_days-t0s)*2*acos(-1.)/360));
-!mj already for eps            en = max(0.0,sin((t_days-t0n)*2*acos(-1.)/360));
             lat_wgt = 0.5*(1-tanh((lat/pif-sc_phi0n)/sc_dphin))*en + 0.5*(1-tanh((lat/pif-sc_phi0s)/sc_dphis))*es
          else
             lat_wgt = 0.5 * ( 1. - tanh((lat/pif-pv_phi0)/pv_dphi) );
@@ -695,19 +680,6 @@ real, intent(in),  dimension(:,:,:), optional :: mask
                   t_sat(:,:) = sat_t(l) * (p_norm(:,:)/sat_p(l))**(-rdgas*sat_g(l)/grav);
                end where
             end do
-!mj change tropical tropopause temperature - delT*ltcos
-            lgpt=log10(p_norm(:,:)/p_tropopause)
-            lgp0=log10(p0)
-            clarg = 0.5*(1. + cos(2.*lat*90./delth + eps_sc*pif)) ! smoother start, but stronger gradient
-!            clarg = cos(lat*90./delth + eps_sc*pif) ! abrupt start, but less gradient
-            where ( abs(lgpt) .lt. abs(lgp0) .and. clarg .gt. 0. .and. abs(lat) .lt. abs(pif*delth) )
-               ltcos = 0.5*(1. + cos(2*pif*90.*lgpt/lgp0))*clarg ! smoother start, but stronger gradient
-!               ltcos = cos(pif*90.*lgpt/lgp0)*clarg ! abrupt start, but less gradient
-            elsewhere
-               ltcos = 0.
-            endwhere
-!mj end
-            
 
             if(sat_only_flag)then !mj
                where ( p_norm < p_tropopause ) !mj
@@ -718,10 +690,152 @@ real, intent(in),  dimension(:,:,:), optional :: mask
                   t_pv = t_tropopause * (p_norm/p_tropopause)**(rdgas*pv_gamma/grav)
                   teq(:,:,k) = (1-lat_wgt) * t_sat + lat_wgt * t_pv;
                endwhere
-            end if !mj
-            teq(:,:,k) = teq(:,:,k) + delT*ltcos !mj
+            end if
          end do
       end if
+
+!  ----- add Jucker et al (2014) stratosphere to teq ----- mj
+      logphs  = log(p_hs)
+      logpbd  = log(p_bd)
+      if ( trim(equilibrium_t_option) == 'JFV' ) then
+         teq_strat = 0.
+         phipi_N = phi_N*pif
+         phipi_S = phi_S*pif
+         where ( lat .ge. phipi_S .and. lat .le. phipi_N )
+            P3 = -1.96e-9*(lat/pif)**4 - 1.15e-5*(lat/pif)**2 + 1
+         elsewhere ( lat .lt. phipi_S ) 
+            P3 = -1.96e-9*(phi_S)**4 - 1.15e-5*(phi_S)**2 + 1
+         elsewhere ( lat .gt. phipi_N )
+            P3 = -1.96e-9*(phi_N)**4 - 1.15e-5*(phi_N)**2 + 1
+         endwhere
+         do k=1, size(t,3)
+            ! tropical vertical profile
+            p_norm(:,:) = log(p_full(:,:,k)/1000.e2)
+            P1 = -0.537*p_norm**4 - 9.65*p_norm**3 - 60.6*p_norm**2 - 174*p_norm + 19.8
+            P2 =                   0.668*p_norm**3 + 22.3*p_norm**2 + 248*p_norm + 1160.
+            where ( p_full(:,:,k) .ge. p_1 )
+               teq_strat(:,:,k) = max(t_strat,P1)
+            elsewhere
+               teq_strat(:,:,k) = max(P1,P2)
+            endwhere
+            ! latitudinal profile
+            p_norm(:,:) = log(p_full(:,:,k)/p_t)/log(p_1/p_t)
+            P4 = 1.
+            where ( p_1 < p_full(:,:,k) < p_t )
+               P4 = (P3 - 1.)*p_norm + 1.
+            elsewhere ( p_full(:,:,k) <= p_1 )
+               P4 =  P3
+            endwhere 
+            ! Add polar amplitudes
+            p_norm(:,:) = log(p_full(:,:,k)/p_t)/(log(p_1/1000.e2) - log(p_t/1000.e2))
+            p_n         = log(p_1          /p_t)/(log(p_1/1000.e2) - log(p_t/1000.e2))
+            where ( p_full(:,:,k) .lt. p_1 )
+               As = A_s*p_n + A_s
+               where ( lat .ge. 0. )
+                  Aw = (A_NH_1 - A_NH_0)*p_n + A_NH_0
+               elsewhere
+                  Aw = (A_SH_1 - A_SH_0)*p_n + A_SH_0
+               endwhere
+            elsewhere
+               As = A_s*p_norm + A_s
+               where ( lat .ge. 0. )
+                  Aw = (A_NH_1 - A_NH_0)*p_norm + A_NH_0
+               elsewhere
+                  Aw = (A_SH_1 - A_SH_0)*p_norm + A_SH_0
+               endwhere
+            endwhere
+            Aw = -abs(lat)*Aw*2/PI
+            As = -abs(lat)*As*2/PI
+            ! add temporal dependence (seasonal cycle)
+            if ( do_seasonal_cycle ) then
+               call get_time(Time,seconds,days)
+               t_days = days+seconds/86400.
+            else
+               t_days = 0
+            endif
+            where ( lat .ge. 0. )
+               D = cos(twopi*t_days/days_per_year)
+            elsewhere
+               D = cos(twopi*(t_days-0.5*days_per_year)/days_per_year)
+            endwhere
+            ! put everything together
+            where ( D .ge. 0. )
+               teq_strat(:,:,k) = teq_strat(:,:,k)*P4 + &
+                    &Aw*D
+            elsewhere
+               teq_strat(:,:,k) = teq_strat(:,:,k)*P4 + &
+                    &(As - teq_strat(:,:,k)*(1. - P4))*D
+            endwhere
+         enddo
+      elseif ( trim(equilibrium_t_option) == 'strat_file' ) then
+         call get_temp(Time, p_half, teq_strat)
+      endif
+      if ( trim(equilibrium_t_option) == 'JFV' .or. &
+           &trim(equilibrium_t_option) == 'strat_file' )then
+         ! merge troposphere and stratosphere
+         Pp = 0.
+         where ( p_full .le. p_hs .and. p_full .ge. p_bd )
+            Pp  = ( logphs - log(p_full) )/( logphs - logpbd )
+            teq = Pp*teq_strat + (1. - Pp)*teq
+         elsewhere( p_full .lt. p_bd )
+            teq = teq_strat   
+         end where
+      end if
+      !! same for tamping rate
+      if ( trim(equilibrium_tau_option) == 'JFV' ) then
+         tau_strat = 0.
+         do k=1,size(t,3)
+            ! meridonal dependence
+            delta_phipi = delta_phi*pif
+            where ( lat .lt. 0. .and. lat .ge. phipi_S )
+               tau_strat(:,:,k) = tau_S_p + (tau_t - tau_S_p)*exp(-(lat/delta_phipi)**2)
+            elsewhere ( lat .lt. phipi_S )
+               tau_strat(:,:,k) = tau_S_p + (tau_t - tau_S_p)*exp(-(phi_S/delta_phi)**2)
+            elsewhere ( lat .ge. 0. .and. lat .le. phi_N )
+               tau_strat(:,:,k) = tau_N_p + (tau_t - tau_N_p)*exp(-(lat/delta_phipi)**2)
+            elsewhere ( lat .gt. phi_N )
+               tau_strat(:,:,k) = tau_S_p + (tau_t - tau_S_p)*exp(-(phi_N/delta_phi)**2)
+            endwhere
+            ! vertical dependence
+            p_norm = log(p_full(:,:,k)/1000.e2)
+            Pp(:,:,k) = 0.045*p_norm**4 + 1.38*p_norm**3 + 15.9*p_norm**2 + 81.6*p_norm + 162
+            p_n = log(0.1e2/1000.e2)
+            where ( p_full(:,:,k) .lt. 0.1e2 )
+               Pp(:,:,k) = 0.045*p_n**4 + 1.38*p_n**3 + 15.9*p_n**2 + 81.6*p_n + 162
+            endwhere
+            p_n = log(p_t/1000.e2)
+            P1 = 0.045*p_n**4 + 1.38*p_n**3 + 15.9*p_n**2 + 81.6*p_n + 162
+         enddo
+         P2 = minval(Pp,3)
+         P3 = P1 - P2
+         do k=1,size(t,3)
+            P4 = min(1.,( Pp(:,:,k) - P2 )/P3)
+            tau_strat(:,:,k) = ( tau_strat(:,:,k) - tau_m )*P4 + tau_m
+         enddo
+         ! convert days to seconds
+         tau_strat = tau_strat*86400
+         ! convert to damping rate
+         tau_strat = 1./tau_strat
+      elseif ( trim(equilibrium_tau_option) == 'strat_file' ) then
+         call get_tau(Time, p_half, tau_strat)
+         tau_strat = 1./tau_strat
+      endif
+      if ( trim(equilibrium_tau_option) == 'strat_file' .or. &
+           &trim(equilibrium_tau_option) == 'strat_file' ) then
+         ! merge with HS troposphere
+         Pp = 0.
+         where ( p_full .le. p_hs .and. p_full .ge. p_bd )
+            Pp  = ( logphs - log(p_full) )/( logphs - logpbd )
+            tdamp = Pp*tau_strat + (1. - Pp)*tdamp
+         elsewhere( p_full .lt. p_bd )
+            tdamp = tau_strat  
+         end where
+      endif
+
+! mj diagnostics
+      tau = 1./tdamp/86400
+
+!  ----- perform Newtonian Cooling -------------
 
       do k=1,size(t,3)
          tdt(:,:,k) = -tdamp(:,:,k)*(t(:,:,k)-teq(:,:,k))
@@ -794,18 +908,6 @@ real    :: scdamp
             vdt(:,:,k) = 0.0
          endwhere
 
-         if (sponge_eddies) then !mj sponge only on eddies, i.e. relax to zonal mean
-            sponge_coeff = 1./sponge_eddies_days/86400.
-            um=sum(u,1)/size(u,1)
-            vm=sum(v,1)/size(v,1)
-            do i=1,size(u,1)
-               where (p_full(i,:,k) < sponge_pbottom)
-                  vfactr(i,:) = -sponge_coeff*(sponge_pbottom-p_full(i,:,k))**2/(sponge_pbottom)**2
-                  udt(i,:,k) = udt(i,:,k) + vfactr(i,:)*(u(i,:,k) - um(:,k))
-                  vdt(i,:,k) = vdt(i,:,k) + vfactr(i,:)*(v(i,:,k) - vm(:,k))
-               endwhere
-            enddo
-         endif
          if (sponge_flag) then   ! t.r.
             sponge_coeff = 1./sponge_tau_days/86400.
             where (p_full(:,:,k) < sponge_pbottom)
