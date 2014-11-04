@@ -62,15 +62,28 @@ private
    real :: trflux = 1.e-5   !  surface flux for optional tracer
    real :: trsink = -0.     !  damping time for tracer
 
-   character(len=256) :: local_heating_option='' ! Valid options are 'from_file', 'Isidoro', and 'Wang'. Local heating not done otherwise.
+!------------------- local heating ------------------------------------------------
+   character(len=256) :: local_heating_option='' ! Valid options are 'from_file', 'Isidoro', and 'Gaussian'. Local heating not done otherwise.
    character(len=256) :: local_heating_file=''   ! Name of file relative to $work/INPUT  Used only when local_heating_option='from_file'
-   real :: local_heating_srfamp=0.               ! Degrees per day.   Used only when local_heating_option='Isidoro' or 'Wang'
+   real :: local_heating_srfamp=0.0              ! Degrees per day.   Used only when local_heating_option='Isidoro' or 'Gaussian'
+   real :: local_heating_constamp=0.0            ! sigma height       Used only when local_heating_option='Gaussian' !mj NOT IMPLEMENTED YET
+   real :: polar_heating_srfamp=0.0              ! Degrees per day.   Used only when local_heating_option='Isidoro' or 'Gaussian' Note: can't have both, or both have same amplitude
    real :: local_heating_xwidth=10.              ! degrees longitude  Used only when local_heating_option='Isidoro'
    real :: local_heating_ywidth=10.              ! degrees latitude   Used only when local_heating_option='Isidoro'
    real :: local_heating_xcenter=180.            ! degrees longitude  Used only when local_heating_option='Isidoro'
    real :: local_heating_ycenter=45.             ! degrees latitude   Used only when local_heating_option='Isidoro'
-   real :: local_heating_sigcenter=0.3           ! []                 Used only when local_heating_option='Wang'
+   real :: local_heating_latwidth=0.4            ! radians latitude   Used only when local_heating_option='Gaussian'
+   real :: local_heating_sigwidth=0.11           ! sigma height       Used only when local_heating_option='Gaussian'
+   real :: local_heating_sigcenter=0.3           ! sigma height       Used only when local_heating_option='Gaussian'
+   logical :: polar_heating_option=.false.       ! want to add some heating over the pole? 
+   real :: polar_heaging_srfamp=0.0              ! Degrees per day    Used only when polar heating
+   real :: polar_heating_latwidth=0.0            ! radians latitude   Used only when polar_heating_option='true'
+   real :: polar_heating_latcenter=0.0           ! radians latitude   Used only when polar_heating_option='true'
+   real :: polar_heating_sigwidth=0.0            ! sigma height       Used only when polar_heating_option='true'
+   real :: polar_heating_sigcenter=0.0           ! sigma height       Used only when polar_heating_option='true'
+   real :: eichelberger_height=12.e3             ! vertical height    Used only when local_heating_option='Eichelberger'
    real :: local_heating_vert_decay=1.e4         ! pascals            Used only when local_heating_option='Isidoro'
+!-----------------------------------------------------------------------------------
 
    logical :: relax_to_specified_wind = .false.
    character(len=256) :: u_wind_file='u', v_wind_file='v' ! Name of files relative to $work/INPUT  Used only when relax_to_specified_wind=.true.
@@ -117,7 +130,11 @@ private
                               trflux, trsink, local_heating_srfamp,          &
                               local_heating_xwidth,  local_heating_ywidth,   &
                               local_heating_xcenter, local_heating_ycenter,  &
-                              local_heating_sigcenter,                       & !mj
+                              local_heating_latwidth, local_heating_sigwidth,& !cc
+                              polar_heating_option, polar_heating_srfamp,    & !cc
+                              polar_heating_sigcenter,polar_heating_latwidth,& !cc
+                              polar_heating_latcenter,polar_heating_sigwidth,& !cc
+                              local_heating_sigcenter, eichelberger_height,  & !mj !cc
                               local_heating_vert_decay, local_heating_option,&
                               local_heating_file, relax_to_specified_wind,   &
                               u_wind_file, v_wind_file, equilibrium_t_option,&
@@ -146,7 +163,7 @@ private
    integer :: id_teq, id_tau, id_tdt, id_udt, id_vdt, id_tdt_diss, id_diss_heat, id_local_heating, id_newtonian_damping
    real    :: missing_value = -1.e10
    real    :: xwidth, ywidth, xcenter, ycenter ! namelist values converted from degrees to radians
-   real    :: srfamp ! local_heating_srfamp converted from deg/day to deg/sec
+   real    :: srfamp, polar_srfamp! local_heating_srfamp converted from deg/day to deg/sec
    character(len=14) :: mod_name = 'hs_forcing'
 
    logical :: module_is_initialized = .false.
@@ -241,7 +258,7 @@ use     tracer_manager_mod, only: get_tracer_index, NO_TRACER !mj
       if (id_newtonian_damping > 0) used = send_data(id_newtonian_damping, ttnd, Time, is, js)
 
       if(trim(local_heating_option) /= '') then
-        call local_heating ( Time, is, js, lon, lat, ps, p_full, p_half, ttnd )
+        call local_heating ( Time, is, js, lon, lat, ps, p_full, p_half, s_geo, t, ttnd )
         tdt = tdt + ttnd
         if (id_local_heating > 0) used = send_data ( id_local_heating, ttnd, Time, is, js)
       endif
@@ -378,6 +395,7 @@ use     tracer_manager_mod, only: get_tracer_index, NO_TRACER !mj
 !     ----- convert local_heating_srfamp from deg/day to deg/sec ----
 
       srfamp = local_heating_srfamp/SECONDS_PER_DAY
+      polar_srfamp = polar_heating_srfamp/SECONDS_PER_DAY
 
 !     ----- compute coefficients -----
 
@@ -1242,19 +1260,22 @@ real    :: scdamp
 
 !#######################################################################
 
-subroutine local_heating ( Time, is, js, lon, lat, ps, p_full, p_half, tdt )
+subroutine local_heating ( Time, is, js, lon, lat, ps, p_full, p_half, surf_geopotential, tg, tdt ) !cc
+use  press_and_geopot_mod, only: compute_pressures_and_heights
 
 type(time_type), intent(in)         :: Time
 integer, intent(in)                 :: is,js
-real, intent(in),  dimension(:,:)   :: lon, lat, ps
-real, intent(in),  dimension(:,:,:) :: p_full
+real, intent(in),  dimension(:,:)   :: lon, lat, ps, surf_geopotential !cc
+real, intent(in),  dimension(:,:,:) :: p_full, tg !cc
 real, intent(in),  dimension(:,:,:) :: p_half
 real, intent(out), dimension(:,:,:) :: tdt
 
 integer :: i, j, k
-real :: lon_temp, x_temp, p_factor, sig_temp
+real :: lon_temp, x_temp, p_factor, z_factor, sig_temp !cc
 real, dimension(size(lon,1),size(lon,2)) :: lon_factor
 real, dimension(size(lat,1),size(lat,2)) :: lat_factor
+real, dimension(size(p_full,1),size(p_full,2),size(p_full,3)) :: p_full_dummy, z_full !cc
+real, dimension(size(p_half,1),size(p_half,2),size(p_half,3)) :: p_half_dummy, z_half !cc
 real, dimension(size(p_half,1),size(p_half,2),size(p_half,3)) :: p_half2
 do i=1,size(p_half,3)
   p_half2(:,:,i)=p_half(:,:,size(p_half,3)-i+1)
@@ -1280,19 +1301,48 @@ else if(trim(local_heating_option) == 'Isidoro') then
      enddo
    enddo
    enddo
-else if(trim(local_heating_option) == 'Wang') then
+else if(trim(local_heating_option) == 'Gaussian') then
    do j=1,size(lon,2)
       do i=1,size(lon,1)
-         lat_factor(i,j) = exp( -lat(i,j)**2/(2*0.4**2) )
+         lat_factor(i,j) = exp( -lat(i,j)**2/(2*(local_heating_latwidth)**2) )
          do k=1,size(p_full,3)
             sig_temp = p_full(i,j,k)/ps(i,j)
-            p_factor = exp(-(sig_temp-local_heating_sigcenter)**2/(2*0.11**2) )
+            p_factor = exp(-(sig_temp-local_heating_sigcenter)**2/(2*(local_heating_sigwidth)**2) )
             tdt(i,j,k) = srfamp*lat_factor(i,j)*p_factor
          enddo
       enddo
    enddo
+else if(trim(local_heating_option) == 'Eichelberger') then
+   call compute_pressures_and_heights(tg, ps, surf_geopotential, z_full, z_half, p_full_dummy, p_half_dummy) !cc; dummy variable because I don't want the pressure variables to be overwritten in case it screws the whole model up
+   do j=1,size(lon,2)
+      do i=1,size(lon,1)
+         lat_factor(i,j) = exp( -lat(i,j)**2/(0.3142**2))
+         do k=1,size(p_full,3)
+            if(z_full(i,j,k)<=12e3) then
+               z_factor = sin((pi*z_full(i,j,k))/12e3)
+             tdt(i,j,k) = srfamp*lat_factor(i,j)*z_factor
+          else 
+             tdt(i,j,k) = 0 
+          endif
+       enddo
+    enddo
+   enddo
 else
-  call error_mesg ('hs_forcing_nml','"'//trim(local_heating_option)//'"  is not a valid value for local_heating_option',FATAL)
+   call error_mesg ('hs_forcing_nml','"'//trim(local_heating_option)//'"  is not a valid value for local_heating_option',FATAL)
+endif
+
+
+if(polar_heating_option) then ! Place a half Gaussian at arctic pole to simulate polar amp
+   do j=1,size(lon,2)
+      do i=1,size(lon,1)
+         lat_factor(i,j) = exp( -(lat(i,j)-polar_heating_latcenter)**2/(2*(polar_heating_latwidth)**2) )
+         do k=1,size(p_full,3)
+            sig_temp = p_full(i,j,k)/ps(i,j)
+            p_factor = exp(-(sig_temp-polar_heating_sigcenter)**2/(2*(polar_heating_sigwidth)**2) )
+            tdt(i,j,k) = tdt(i,j,k) + polar_srfamp*lat_factor(i,j)*p_factor
+         enddo
+      enddo
+   enddo
 endif
 
 end subroutine local_heating
