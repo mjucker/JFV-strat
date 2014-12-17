@@ -67,7 +67,6 @@ private
    character(len=256) :: local_heating_file=''   ! Name of file relative to $work/INPUT  Used only when local_heating_option='from_file'
    real :: local_heating_srfamp=0.0              ! Degrees per day.   Used only when local_heating_option='Isidoro' or 'Gaussian'
    real :: local_heating_constamp=0.0            ! sigma height       Used only when local_heating_option='Gaussian' !mj NOT IMPLEMENTED YET
-   real :: polar_heating_srfamp=0.0              ! Degrees per day.   Used only when local_heating_option='Isidoro' or 'Gaussian' Note: can't have both, or both have same amplitude
    real :: local_heating_xwidth=10.              ! degrees longitude  Used only when local_heating_option='Isidoro'
    real :: local_heating_ywidth=10.              ! degrees latitude   Used only when local_heating_option='Isidoro'
    real :: local_heating_xcenter=180.            ! degrees longitude  Used only when local_heating_option='Isidoro'
@@ -76,7 +75,7 @@ private
    real :: local_heating_sigwidth=0.11           ! sigma height       Used only when local_heating_option='Gaussian'
    real :: local_heating_sigcenter=0.3           ! sigma height       Used only when local_heating_option='Gaussian'
    logical :: polar_heating_option=.false.       ! want to add some heating over the pole? 
-   real :: polar_heaging_srfamp=0.0              ! Degrees per day    Used only when polar heating
+   real :: polar_heating_srfamp=0.0              ! Degrees per day    Used only when polar heating_option='true'
    real :: polar_heating_latwidth=0.0            ! radians latitude   Used only when polar_heating_option='true'
    real :: polar_heating_latcenter=0.0           ! radians latitude   Used only when polar_heating_option='true'
    real :: polar_heating_sigwidth=0.0            ! sigma height       Used only when polar_heating_option='true'
