@@ -66,6 +66,11 @@ fms_riga_hs_jucker/src/atmos_param/hs_forcing/hs_forcing.f90
 --------------
 
 Specific to the dry dynamical core of the GCM AM2 of the Geophysical Fluid Dynamics Laboratory (GFDL). The FORTRAN file  replaces the standard atmos_param/hs_forcing/hs_forcing.f90 file in the FMS file tree.
-It adds the possibility to read in a Te and a tau profile from an input netCDF file, called INPUT/temp.nc and INPUT/tau.nc respectively (and easily produced with the MATLAB scripts provided in this package).
+
+There are two ways to get the stratospheric forcing working:
+
+1) It adds the possibility to read in a Te and a tau profile from an input netCDF file, called INPUT/temp.nc and INPUT/tau.nc respectively (and easily produced with the MATLAB scripts provided in this package).
 
 To make it work, add temp.nc and/or tau.nc to the folder INPUT in the run directory, and set equilibrium_t_option and/or equilibrium_tau_option to 'from_file' in the namelist hs_forcing_nml.
+
+2) The analytical profile defined in the [2014 paper](http://onlinelibrary.wiley.com/doi/10.1002/2014JD022170/abstract) is hard coded into hs_forcing. Set equilibrium_t_option and/or equilibrium_tau_option to 'JFV', and set the parameters as described in the paper and the code. 
