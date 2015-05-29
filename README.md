@@ -3,20 +3,20 @@ JFV-strat [![DOI](https://zenodo.org/badge/13408/mjucker/JFV-strat.svg)](http://
 
 Realistic stratospheric Newtonian cooling setup in Held-Suarez-like General Circulation Models, as described in 
 
-[M Jucker, S Fueglistaler, and GK Vallis (2013): Maintenance of the Stratospheric Structure in an Idealized General Circulation Model, J. Atmos. Sci. 70, 3341, DOI: 10.1175/JAS-D-12-0305.1](http://journals.ametsoc.org/doi/abs/10.1175/JAS-D-12-0305.1),
+[M Jucker, S Fueglistaler, and GK Vallis (2013): Maintenance of the Stratospheric Structure in an Idealized General Circulation Model, J. Atmos. Sci. 70, 3341, DOI: 10.1175/JAS-D-12-0305.1](http://dx.doi.org/10.1175/JAS-D-12-0305.1),
 
 and the analytical approximation described in 
 
-[M Jucker, S Fueglistaler, and GK Vallis (2014): Stratospheric sudden warmings in an idealized GCM, J. Geophys. Res., DOI: 10.1002/2014JD022170] (http://onlinelibrary.wiley.com/doi/10.1002/2014JD022170/abstract)
+[M Jucker, S Fueglistaler, and GK Vallis (2014): Stratospheric sudden warmings in an idealized GCM, J. Geophys. Res., DOI: 10.1002/2014JD022170] (http://dx.doi.org/10.1002/2014JD022170/abstract)
 
 This model is based on the Geophyiscal Fluid Dynamics Laboratory's (GFDL) AM2 code. For online documentation, see
 [GFDL's AM2 documentation website](http://data1.gfdl.noaa.gov/~arl/pubrel/m/am2/doc/), and for references, see
 
-[The GFDL Global Atmospheric Model Development Team, 2004: The new GFDL global atmosphere and land model AM2-LM2: Evaluation with prescribed SST simulations. Journal of Climate, 17(24), 4641-4673](http://journals.ametsoc.org/doi/abs/10.1175/JCLI-3223.1)
+[The GFDL Global Atmospheric Model Development Team, 2004: The new GFDL global atmosphere and land model AM2-LM2: Evaluation with prescribed SST simulations. Journal of Climate, 17(24), 4641-4673](http://dx.doi.org/10.1175/JCLI-3223.1)
 
-Delworth, T. L., et al., 2006: GFDL's CM2 Global Coupled Climate Models. Part I: Formulation and simulation characteristics. Journal of Climate, 19(5), 643-674.
+[Delworth, T. L., et al., 2006: GFDL's CM2 Global Coupled Climate Models. Part I: Formulation and simulation characteristics. Journal of Climate, 19(5), 643-674](http://dx.doi.org/10.1175/JCLI3629.1).
 
-Lin, S-J., 2004: A "vertically Lagrangian" finite-volume dynamical core for global models. Monthly Weather Review, 132(10), 2293-2307.
+[Lin, S-J., 2004: A "vertically Lagrangian" finite-volume dynamical core for global models. Monthly Weather Review, 132(10), 2293-2307](http://dx.doi.org/10.1175/1520-0493(2004)132%3C2293:AVLFDC%3E2.0.CO;2).
 
 In particular, this code uses the spectral HSt42 experiment of the Riga release (December 2010). If you already have 
 that experiment from the Flexible Modeling System (FMS), you probably only need to replace your hs_forcing.F90 with
