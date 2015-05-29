@@ -1,4 +1,4 @@
-JFV-strat
+JFV-strat [![DOI](https://zenodo.org/badge/13408/mjucker/JFV-strat.svg)](http://dx.doi.org/10.5281/zenodo.18125)
 =========
 
 Realistic stratospheric Newtonian cooling setup in Held-Suarez-like General Circulation Models, as described in 
