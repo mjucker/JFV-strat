@@ -12,7 +12,7 @@ and the analytical approximation described in
 This model is based on the Geophyiscal Fluid Dynamics Laboratory's (GFDL) AM2 code. For online documentation, see
 [GFDL's AM2 documentation website](http://data1.gfdl.noaa.gov/~arl/pubrel/m/am2/doc/), and for references, see
 
-[The GFDL Global Atmospheric Model Development Team, 2004: The new GFDL global atmosphere and land model AM2-LM2: Evaluation with prescribed SST simulations. Journal of Climate, 17(24), 4641-4673](http://www.gfdl.noaa.gov/reference/bibliography/2004/gamdt0401.html)
+[The GFDL Global Atmospheric Model Development Team, 2004: The new GFDL global atmosphere and land model AM2-LM2: Evaluation with prescribed SST simulations. Journal of Climate, 17(24), 4641-4673](http://journals.ametsoc.org/doi/abs/10.1175/JCLI-3223.1)
 
 Delworth, T. L., et al., 2006: GFDL's CM2 Global Coupled Climate Models. Part I: Formulation and simulation characteristics. Journal of Climate, 19(5), 643-674.
 
