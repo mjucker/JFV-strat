@@ -798,7 +798,7 @@ real, intent(in),  dimension(:,:,:), optional :: mask
             teq = teq_strat   
          end where
       end if
-      !! same for tamping rate
+      !! same for damping rate
       if ( trim(equilibrium_tau_option) == 'JFV' ) then
          tau_strat = 0.
          do k=1,size(t,3)
@@ -838,7 +838,7 @@ real, intent(in),  dimension(:,:,:), optional :: mask
          tau_strat = 1./tau_strat
       endif
       if ( trim(equilibrium_tau_option) == 'strat_file' .or. &
-           &trim(equilibrium_tau_option) == 'strat_file' ) then
+           &trim(equilibrium_tau_option) == 'JFV' ) then
          ! merge with HS troposphere
          Pp = 0.
          where ( p_full .le. p_hs .and. p_full .ge. p_bd )
