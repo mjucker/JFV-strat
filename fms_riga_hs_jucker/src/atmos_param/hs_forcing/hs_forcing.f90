@@ -48,10 +48,10 @@ private
    logical :: no_forcing = .false.
    logical :: surface_forcing_input = .false.
 
-   real :: t_zero=315., t_strat=200., delh=60., delv=10., eps=10., sigma_b=0.7
+   real :: t_zero=315., t_strat=200., delh=60., delv=10., sigma_b=0.7
 
    real :: P00 = 1.e5
-   real :: eps_sc !mj eps in seasonal cycle
+   real :: epsS=0., epsN=0. !mj eps differ in SH and NH
 
    real :: ka = -40. !  negative values are damping time in days
    real :: k_strat = -40. ! tjr
@@ -124,7 +124,7 @@ private
 !-----------------------------------------------------------------------
 
    namelist /hs_forcing_nml/  no_forcing, surface_forcing_input,             &
-   	    		      t_zero, t_strat, delh, delv, eps,              &
+   	    		      t_zero, t_strat, delh, delv,                   &
                               sigma_b, ka, ks, kf, do_conserve_energy,       &
                               trflux, trsink, local_heating_srfamp,          &
                               local_heating_xwidth,  local_heating_ywidth,   &
@@ -142,7 +142,8 @@ private
                               sponge_flag,sponge_pbottom,sponge_tau_days,    &  ! tjr
                               p_tropopause,scaife_damp, scaife_flag,         &  ! hmchen
                               sigma_strat1,sigma_strat2,k_strat,             &  ! tjr
-                              sc_flag,sc_phi0n,sc_phi0s,sc_dphin,sc_dphis,   &
+                              sc_flag,sc_phi0n,sc_phi0s,sc_dphin,sc_dphis,   &  !mj
+                              epsS,epsN,                                     &  !mj
                               sat_only_flag,                                 &  !mj
                               equilibrium_tau_option,equilibrium_tau_file,   &  !mj
                               p_hs,p_bd,A_NH_0,A_NH_1,A_SH_0,A_SH_1,A_s,     &  !mj
@@ -586,6 +587,8 @@ real, intent(in),  dimension(:,:,:), optional :: mask
    real :: t0n,t0s,t_days,en,es
    integer :: days,seconds
    integer :: hits
+!-------------------------mj Jucker et al (2013) troposphere  ----------
+   real,dimension(size(t,1),size(t,2))  :: eps, eps_sc
 !-------------------------mj Jucker et al (2014) stratosphere ----------
    real                                          :: p_t=100.e2,p_1=1.e2
    real                                          :: p_n,phipi_N,phipi_S&
@@ -602,6 +605,12 @@ real, intent(in),  dimension(:,:,:), optional :: mask
       sin_lat_2(:,:) = sin_lat(:,:)*sin_lat(:,:)
       cos_lat_2(:,:) = 1.0-sin_lat_2(:,:)
       cos_lat_4(:,:) = cos_lat_2(:,:)*cos_lat_2(:,:)
+!mj difference between southern and northern hemisphere
+      where( lat(:,:) <= 0. )
+         eps = epsS
+      elsewhere
+         eps = epsN
+      end where
 !mj seasonal cycle in eps
       if(sc_flag)then
          t0n=0
@@ -1438,3 +1447,4 @@ end subroutine get_tau
 !#######################################################################
 
 end module hs_forcing_mod
+
