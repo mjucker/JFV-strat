@@ -112,14 +112,14 @@ private
 
    real :: sigma_strat1=-1,sigma_strat2=-2 ! levels defining transition from tka to tk_strat tjr
 
-   logical :: sc_flag = .false. ! flag for seasonal cycle in stratospheric te
+   logical :: sc_flag = .false. ! flag for seasonal cycle in Te through eps and PK02 stratosphere
    real ::  sc_phi0n,sc_phi0s,sc_dphin,sc_dphis !generalizations, for seasonal cycle option, of pv_phi0 and pv_dphi above
 
 !-------------- Jucker et al JGR (2014) background ---------------------
    real :: p_hs=250.e2,p_bd=100.e2   ! boundaries for transition from Held_Suarez to JFV stratosphere
    real :: A_NH_0=15, A_NH_1=45, A_SH_0=25, A_SH_1=60, A_s=15, phi_N=80, phi_S=-80 ! stratospheric polar temperature amplitdues
    real :: tau_t=40, tau_N_p=20, tau_S_p=20, delta_phi=30, tau_m=5 ! stratospheric relaxation time setup (tropics, northpole, southpole)
-   logical :: do_seasonal_cycle=.false.  !add seasonal cycle in stratosphere?
+   logical :: do_seasonal_cycle=.true.  !add seasonal cycle in stratosphere?
    real :: days_per_year=365             !for determining seasonal cycle
 !-----------------------------------------------------------------------
 
@@ -371,6 +371,7 @@ use     tracer_manager_mod, only: get_tracer_index, NO_TRACER !mj
         pv_sat_flag=.false.
         sat_only_flag=.false.
      endif
+     if(do_seasonal_cycle) sc_flag = .true.
 
 !     ----- write version info and namelist to log file -----
 
@@ -583,6 +584,7 @@ real, intent(in),  dimension(:,:,:), optional :: mask
 
    real :: t_tropopause =  216.650
    real :: pif = 3.14159265358979/180.
+   real :: pid = 3.14159265358979
    real, dimension(size(lat,1),size(lat,2)) :: lat_wgt, t_sat, t_pv
    real :: t0n,t0s,t_days,en,es
    integer :: days,seconds
@@ -614,13 +616,13 @@ real, intent(in),  dimension(:,:,:), optional :: mask
 !mj seasonal cycle in eps
       if(sc_flag)then
          t0n=0
-         t0s=180
+         t0s=days_per_year/2
 !         if (.not.present(Time)) call error_mesg('newtonian_damping','sc_flag true but time not present',FATAL)
          call get_time(Time,seconds,days)
          t_days = days+seconds/86400
-         es = max(0.0,sin((t_days-t0s)*2*acos(-1.)/360));
-         en = max(0.0,sin((t_days-t0n)*2*acos(-1.)/360));
-         eps_sc = eps*(en - es)
+         es = max(0.0,sin((t_days-t0s)*2*pid/days_per_year));
+         en = max(0.0,sin((t_days-t0n)*2*pid/days_per_year));
+         eps_sc = eps*cos(2*pid*t_days/days_per_year)
 !         eps_sc =  -eps*sin((t_days-t0s)/360*2*pif*180)
 !mj
       else
