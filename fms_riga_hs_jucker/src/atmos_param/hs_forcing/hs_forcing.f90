@@ -118,7 +118,9 @@ private
 !-------------- Jucker et al JGR (2014) background ---------------------
    real :: p_hs=250.e2,p_bd=100.e2   ! boundaries for transition from Held_Suarez to JFV stratosphere
    real :: A_NH_0=15, A_NH_1=45, A_SH_0=25, A_SH_1=60, A_s=15, phi_N=80, phi_S=-80 ! stratospheric polar temperature amplitdues
+   real :: T_fact=1.0 ! scale the stratospheric Te profile (0 -> Te=t_strat, 1 -> full Te profile)
    real :: tau_t=40, tau_N_p=20, tau_S_p=20, delta_phi=30, tau_m=5 ! stratospheric relaxation time setup (tropics, northpole, southpole)
+   real :: tau_fact=1.0 ! scale the stratospheric tau profile (0 -> tau=tau_t, 1 -> full tau profile)
    logical :: do_seasonal_cycle=.true.  !add seasonal cycle in stratosphere?
    real :: days_per_year=365             !for determining seasonal cycle
 !-----------------------------------------------------------------------
@@ -148,6 +150,7 @@ private
                               equilibrium_tau_option,equilibrium_tau_file,   &  !mj
                               p_hs,p_bd,A_NH_0,A_NH_1,A_SH_0,A_SH_1,A_s,     &  !mj
                               phi_N,phi_S,tau_t,tau_N_p,tau_S_p,delta_phi,   &  !mj
+                              Te_fact,tau_fact,                              &  !mj
                               tau_m,do_seasonal_cycle,days_per_year             !mj
 
 !-----------------------------------------------------------------------
@@ -794,6 +797,8 @@ real, intent(in),  dimension(:,:,:), optional :: mask
                teq_strat(:,:,k) = teq_strat(:,:,k)*P4 + &
                     &(As - teq_strat(:,:,k)*(1. - P4))*D
             endwhere
+            ! scale Te profile by T_fact
+            teq_strat(:,:,k) = (1.-T_fact)*t_strat + T_fact*teq_strat(:,:,k)
          enddo
       elseif ( trim(equilibrium_t_option) == 'strat_file' ) then
          call get_temp(Time, p_half, teq_strat)
@@ -840,6 +845,8 @@ real, intent(in),  dimension(:,:,:), optional :: mask
             P4 = min(1.,( Pp(:,:,k) - P2 )/P3)
             tau_strat(:,:,k) = ( tau_strat(:,:,k) - tau_m )*P4 + tau_m
          enddo
+         ! scale profile 
+         tau_strat(:,:,k) = (1.-tau_fact)*tau_t + tau_fact*tau_strat(:,:,k)
          ! convert days to seconds
          tau_strat = tau_strat*86400
          ! convert to damping rate
