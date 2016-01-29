@@ -74,7 +74,7 @@ private
    real :: local_heating_latwidth=0.4            ! radians latitude   Used only when local_heating_option='Gaussian'
    real :: local_heating_sigwidth=0.11           ! sigma height       Used only when local_heating_option='Gaussian'
    real :: local_heating_sigcenter=0.3           ! sigma height       Used only when local_heating_option='Gaussian'
-   logical :: polar_heating_option=.false.       ! want to add some heating over the pole? 
+   logical :: polar_heating_option=.false.       ! want to add some heating over the pole?
    real :: polar_heating_srfamp=0.0              ! Degrees per day    Used only when polar heating_option='true'
    real :: polar_heating_latwidth=0.0            ! radians latitude   Used only when polar_heating_option='true'
    real :: polar_heating_latcenter=0.0           ! radians latitude   Used only when polar_heating_option='true'
@@ -150,7 +150,7 @@ private
                               equilibrium_tau_option,equilibrium_tau_file,   &  !mj
                               p_hs,p_bd,A_NH_0,A_NH_1,A_SH_0,A_SH_1,A_s,     &  !mj
                               phi_N,phi_S,tau_t,tau_N_p,tau_S_p,delta_phi,   &  !mj
-                              Te_fact,tau_fact,                              &  !mj
+                              T_fact,tau_fact,                              &  !mj
                               tau_m,do_seasonal_cycle,days_per_year             !mj
 
 !-----------------------------------------------------------------------
@@ -276,7 +276,7 @@ use     tracer_manager_mod, only: get_tracer_index, NO_TRACER !mj
       call get_number_tracers(MODEL_ATMOS, num_tracers=num_tracers)
       n_hum   = get_tracer_index(MODEL_ATMOS, 'sphum') !mj
       n_pv   = get_tracer_index(MODEL_ATMOS, 'pv') !mj
-      
+
       if(num_tracers == size(rdt,4)) then
         do n = 1, size(rdt,4)
            flux = trflux
@@ -293,12 +293,12 @@ use     tracer_manager_mod, only: get_tracer_index, NO_TRACER !mj
            elseif(n == get_tracer_index(MODEL_ATMOS,'methane')) then !mj methane tracer
               rst = rm(:,:,:,n) + dt*rdt(:,:,:,n) !mj
               call methane_source_sink ( flux, sink, p_half, rst, rtnd, kbot ) !mj
-              rdt(:,:,:,n) = rdt(:,:,:,n) + rtnd !mj      
+              rdt(:,:,:,n) = rdt(:,:,:,n) + rtnd !mj
            elseif(n == n_pv) then
               rst = rm(:,:,:,n) + dt*rdt(:,:,:,n) !mj
               tst = tm + dt*tdt !mj
               call pv_tracer(vom, tst, lat, p_full, dt, rst, rtnd)
-              rdt(:,:,:,n) = rdt(:,:,:,n) + rtnd !mj   
+              rdt(:,:,:,n) = rdt(:,:,:,n) + rtnd !mj
            elseif(n == get_tracer_index(MODEL_ATMOS, 'APV')) then !mj Blocking index as Schwierz2004
               rst = rm(:,:,:,n) + dt*rdt(:,:,:,n) !mj
               tst = tm + dt*tdt !mj
@@ -309,7 +309,7 @@ use     tracer_manager_mod, only: get_tracer_index, NO_TRACER !mj
                  pvt = rm(:,:,:,n_pv) + dt*rdt(:,:,:,n_pv) !mj
                  call apv_tracer(pvt,p_full,dt,rst,rtnd)
               endif
-              rdt(:,:,:,n) = rdt(:,:,:,n) + rtnd !mj  
+              rdt(:,:,:,n) = rdt(:,:,:,n) + rtnd !mj
            else !mj
               if (query_method('tracer_sms', MODEL_ATMOS, n, scheme, params)) then
                  if (uppercase(trim(scheme)) == 'NONE') cycle
@@ -347,7 +347,7 @@ use     tracer_manager_mod, only: get_tracer_index, NO_TRACER !mj
            integer, intent(in) :: axes(4)
    type(time_type), intent(in) :: Time
    real, intent(in), optional, dimension(:,:) :: lonb, latb
-   
+
 
 !-----------------------------------------------------------------------
    integer  unit, io, ierr
@@ -405,7 +405,7 @@ use     tracer_manager_mod, only: get_tracer_index, NO_TRACER !mj
 
 ! If positive, damping time units are (1/s),  value is the inverse of damping time.
 ! If negative, damping time units are (days), value is the damping time. It is converted to (1/s)
-      
+
       if (ka < 0.) then
         tka = -1./(86400*ka)
       else
@@ -488,7 +488,7 @@ use     tracer_manager_mod, only: get_tracer_index, NO_TRACER !mj
           &trim(equilibrium_tau_option) == 'strat_file' ) then
         call interpolator_init (tau_interp, trim(equilibrium_tau_file)//'.nc', lonb, latb, data_out_of_bounds=(/CONSTANT/),vert_interp=(/INTERP_LINEAR_P/))
      endif
-     
+
 
      module_is_initialized  = .true.
 
@@ -496,7 +496,7 @@ use     tracer_manager_mod, only: get_tracer_index, NO_TRACER !mj
 
 !#######################################################################
 
- subroutine hs_forcing_end 
+ subroutine hs_forcing_end
 
 !-----------------------------------------------------------------------
 !
@@ -524,7 +524,7 @@ use     tracer_manager_mod, only: get_tracer_index, NO_TRACER !mj
    call interpolator_end(u_interp)
    call interpolator_end(v_interp)
  endif
- 
+
  module_is_initialized = .false.
 
  end subroutine hs_forcing_end
@@ -634,7 +634,7 @@ real, intent(in),  dimension(:,:,:), optional :: mask
 
       t_star(:,:) = t_zero - delh*sin_lat_2(:,:) - eps_sc*sin_lat(:,:)
       if ( .not. pv_sat_flag) then
-         tstr  (:,:) = t_strat 
+         tstr  (:,:) = t_strat
       else
          tstr  (:,:) = t_tropopause
       endif
@@ -688,7 +688,7 @@ real, intent(in),  dimension(:,:,:), optional :: mask
          endwhere
       else
          call error_mesg ('hs_forcing_nml', &
-         '"'//trim(equilibrium_tau_option)//'"  is not a valid value for equilibrium_tau_option',FATAL)         
+         '"'//trim(equilibrium_tau_option)//'"  is not a valid value for equilibrium_tau_option',FATAL)
       endif
 
 
@@ -707,7 +707,7 @@ real, intent(in),  dimension(:,:,:), optional :: mask
             p_norm(:,:) = p_full(:,:,k)/pref
 
             do l = 1,sat_levs - 1
-               where (p_norm(:,:) < p_tropopause .and. p_norm(:,:) > sat_p(l+1) .and. p_norm(:,:) <= sat_p(l)) 
+               where (p_norm(:,:) < p_tropopause .and. p_norm(:,:) > sat_p(l+1) .and. p_norm(:,:) <= sat_p(l))
                   t_sat(:,:) = sat_t(l) * (p_norm(:,:)/sat_p(l))**(-rdgas*sat_g(l)/grav);
                end where
             end do
@@ -734,7 +734,7 @@ real, intent(in),  dimension(:,:,:), optional :: mask
          phipi_S = phi_S*pif
          where ( lat .ge. phipi_S .and. lat .le. phipi_N )
             P3 = -1.96e-9*(lat/pif)**4 - 1.15e-5*(lat/pif)**2 + 1
-         elsewhere ( lat .lt. phipi_S ) 
+         elsewhere ( lat .lt. phipi_S )
             P3 = -1.96e-9*(phi_S)**4 - 1.15e-5*(phi_S)**2 + 1
          elsewhere ( lat .gt. phipi_N )
             P3 = -1.96e-9*(phi_N)**4 - 1.15e-5*(phi_N)**2 + 1
@@ -756,7 +756,7 @@ real, intent(in),  dimension(:,:,:), optional :: mask
                P4 = (P3 - 1.)*p_norm + 1.
             elsewhere ( p_full(:,:,k) <= p_1 )
                P4 =  P3
-            endwhere 
+            endwhere
             ! Add polar amplitudes
             p_norm(:,:) = log(p_full(:,:,k)/p_t)/(log(p_1/1000.e2) - log(p_t/1000.e2))
             p_n         = log(p_1          /p_t)/(log(p_1/1000.e2) - log(p_t/1000.e2))
@@ -811,7 +811,7 @@ real, intent(in),  dimension(:,:,:), optional :: mask
             Pp  = ( logphs - log(p_full) )/( logphs - logpbd )
             teq = Pp*teq_strat + (1. - Pp)*teq
          elsewhere( p_full .lt. p_bd )
-            teq = teq_strat   
+            teq = teq_strat
          end where
       end if
       !! same for damping rate
@@ -844,9 +844,9 @@ real, intent(in),  dimension(:,:,:), optional :: mask
          do k=1,size(t,3)
             P4 = min(1.,( Pp(:,:,k) - P2 )/P3)
             tau_strat(:,:,k) = ( tau_strat(:,:,k) - tau_m )*P4 + tau_m
+            ! scale profile
+            tau_strat(:,:,k) = (1.-tau_fact)*tau_t + tau_fact*tau_strat(:,:,k)
          enddo
-         ! scale profile 
-         tau_strat(:,:,k) = (1.-tau_fact)*tau_t + tau_fact*tau_strat(:,:,k)
          ! convert days to seconds
          tau_strat = tau_strat*86400
          ! convert to damping rate
@@ -863,7 +863,7 @@ real, intent(in),  dimension(:,:,:), optional :: mask
             Pp  = ( logphs - log(p_full) )/( logphs - logpbd )
             tdamp = Pp*tau_strat + (1. - Pp)*tdamp
          elsewhere( p_full .lt. p_bd )
-            tdamp = tau_strat  
+            tdamp = tau_strat
          end where
       endif
 
@@ -1006,7 +1006,7 @@ real    :: scdamp
       if (rdamp > 0.) rdamp = 1./rdamp
 
 !------------ surface source and global sink ---------------------------
-      
+
       source(:,:,:)=0.0
       sink(:,:,:)=0.0 !mj
       sea_surf=0 !mj
@@ -1029,7 +1029,7 @@ real    :: scdamp
         kb = size(r,3)
         qsat = RDGAS*ES0*exp(-HLV*(1./t - 1./TFREEZE)/RVGAS)/RVGAS !mj
         qsat = qsat/p_full !mj
-        source(:,:,kb) = max(0.,-vkf*(r(:,:,kb)-qsat(:,:,kb))) !mj 
+        source(:,:,kb) = max(0.,-vkf*(r(:,:,kb)-qsat(:,:,kb))) !mj
         source(:,:,kb) = source(:,:,kb)*sea_surf(:,:) !mj mountains
      endif
 
@@ -1039,9 +1039,9 @@ real    :: scdamp
 !         sink = 1. + qsat*HLV*HLV/(RVGAS*CP_AIR*t*t) !mj as in Frierson 2006 JAS
 !         sink = (r - qsat)/sink/dt !mj continued
      end where
-      
+
 !      sink = sink + rdamp*r !mj add global sink
-      
+
 !      sink = 0.
 !      sink = r/dt
 !      source = 0.
@@ -1066,13 +1066,13 @@ real    :: scdamp
       integer :: i, j, kb
       real    :: rdamp
 !-----------------------------------------------------------------------
- 
+
       rdamp = damp
       if (rdamp < 0.) rdamp = -86400.*rdamp   ! convert days to seconds
       if (rdamp > 0.) rdamp = 1./rdamp
 
 !------------ simple surface source and no sink --------------------
-    
+
       source=0.0
       sink  =0.0
 
@@ -1092,7 +1092,7 @@ real    :: scdamp
 
       sink = rdamp*r
 
-      rdt = source - sink      
+      rdt = source - sink
 
 !-----------------------------------------------------------------------
 
@@ -1118,7 +1118,7 @@ real    :: scdamp
       if (rdamp > 0.) rdamp = 1./rdamp
 
 !------------ surface source and global sink ---------------------------
-     
+
       source(:,:,:)=0.0
       sink(:,:,:)=0.0 !mj
 
@@ -1134,14 +1134,14 @@ real    :: scdamp
         kb = size(r,3)
         source(:,:,kb) = -vkf*(r(:,:,kb)-flux) !mj tracer value fixed to trflux at bottom
      endif
-      
+
 
      sink = rdamp*r
-      
+
 
      rdt = source - sink
 
-      
+
 
 !-----------------------------------------------------------------------
 
@@ -1160,8 +1160,8 @@ real    :: scdamp
 !      real,dimension(size(rdt,1),size(rdt,2)) :: wa,dTheta
       real :: wa,dTheta
 !-----------------------------------------------------------------------
-     
-      
+
+
       do k=2,size(rdt,3) !actual value
          do j=1,size(rdt,2)
             do i=1,size(rdt,1)
@@ -1173,7 +1173,7 @@ real    :: scdamp
       enddo
       rdt(:,:,1)=rdt(:,:,2)
 !!$      rdt = vorn
-      
+
       if(dt.gt.0.0)then ! normal pv tracer
          rdt = (rdt-r)/dt
       endif
@@ -1197,8 +1197,8 @@ real    :: scdamp
       p_high = 50000.
       del_p  = 0.
       apv    = 0.
-      
-      do k=2,size(rdt,3) 
+
+      do k=2,size(rdt,3)
          do j=1,size(rdt,2)
             do i=1,size(rdt,1)
                if(p_half(i,j,k) >= p_low .and. p_half(i,j,k+1) <= p_high)then
@@ -1215,7 +1215,7 @@ real    :: scdamp
       enddo
       rdt(:,:,1)=rdt(:,:,2)
 !!$      rdt = vorn
-      
+
       rdt = (rdt-r)/dt
 
 !-----------------------------------------------------------------------
@@ -1338,8 +1338,8 @@ else if(trim(local_heating_option) == 'Eichelberger') then
             if(z_full(i,j,k)<=12e3) then
                z_factor = sin((pi*z_full(i,j,k))/12e3)
              tdt(i,j,k) = srfamp*lat_factor(i,j)*z_factor
-          else 
-             tdt(i,j,k) = 0 
+          else
+             tdt(i,j,k) = 0
           endif
        enddo
     enddo
@@ -1456,4 +1456,3 @@ end subroutine get_tau
 !#######################################################################
 
 end module hs_forcing_mod
-
