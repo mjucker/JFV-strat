@@ -5,7 +5,7 @@
 ############
 # commands #
 ############
-FC = ifort #single CPU 
+FC = ifort #single CPU
 FC = mpif90 #using MPI
 CC = icc
 LD = ifort
@@ -13,7 +13,7 @@ LD = $(FC)
 #########
 # flags #
 #########
-DEBUG = 
+DEBUG =
 REPRO =
 VERBOSE =
 OPENMP =
@@ -30,7 +30,7 @@ LIB_NETCDF := $(shell nc-config --flibs)
 FPPFLAGS := -fpp -Wp,-w
 CPPFLAGS := $(INC_NETCDF) $(INC_MPI)
 
-FFLAGS := -fno-alias -stack_temps -safe_cray_ptr -ftz -i_dynamic -assume byterecl -i4 -r8 -nowarn -g
+FFLAGS := -fno-alias -stack_temps -safe_cray_ptr -ftz -i-dynamic -assume byterecl -i4 -r8 -nowarn -g
 FFLAGS += $(INC_NETCDF) $(INC_MPI)
 FFLAGS_OPT = -O2
 FFLAGS_REPRO = -fltconsistency
@@ -40,7 +40,7 @@ FFLAGS_OPENMP = -openmp
 FFLAGS_VERBOSE = -v -V -what
 
 
-CFLAGS := -D__IFC 
+CFLAGS := -D__IFC
 CFLAGS_OPT = -O2
 CFLAGS_OPENMP = -openmp
 CFLAGS_DEBUG = -O0 -g -ftrapuv -traceback
