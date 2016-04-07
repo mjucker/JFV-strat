@@ -1,6 +1,6 @@
 function TePV=Te_analytic(lat,pres,days,limlatSH,limlatNH,A0_SH,A0_NH,A1_SH,A1_NH,T_strat,epsS,epsN,p_hsin,p_bdin,filename)
 % Computes analytic profile as a function of latitude, pressure, and day of the year, approximating radiatively found profiles
-% 
+%
 % Inputs are:
 % STRATOSPHERE:
 % lat: latitude for output grid [deg]
@@ -17,7 +17,7 @@ function TePV=Te_analytic(lat,pres,days,limlatSH,limlatNH,A0_SH,A0_NH,A1_SH,A1_N
 % p_bdin: for pressures below p_bdin [hPa, size latin x days], Tin is used.
 %   standard: 100hPa
 %   for p_bdin < p < p_hsin, linear interpolation between the two
-% filename, if present, is the name of the file containing final tau. 
+% filename, if present, is the name of the file containing final tau.
 %   For usage with FMS, this should be [some directory/]temp.nc.
 %   If empty, no file will be created.
 %
@@ -85,7 +85,7 @@ AS = -abs(lat)/90*(gammaS*log(pres'/pt) + A0s);
 AS(:,II) = AS(:,II(end)+1)*ones(size(II))'; % choice B: constant amplitude above p1
 
 Te0 = zeros(size(Te,1),size(Te,2),t_length); %this will be the stratospheric Te
- for d=1:t_length  
+ for d=1:t_length
     cosNH = cos(2*pi*(days(d      ))/365); %days(d)-349 for realistic solstice, but needs change in Held-Suarez as well
     cosSH = cos(2*pi*(days(d-182.5))/365); %days(d)-166.5 for realistic solstice
     if(cosNH>0)
@@ -127,7 +127,7 @@ for l=1:length(lat)
             else
                 eps=epsN*cos(2*pi*days(d)/365);
             end
-            TeHS(l,k,d)=max(T_strat,(T0 - delT*(sin(lat(l)*pi/180).^2) - eps*sin(lat(l)*pi/180)- delv*log(sigma(k)).*(cos(lat(l)*pi/180).^4)).*(sigma(k)^kap));
+            TeHS(l,k,d)=max(T_strat,(T0 - delT*(sin(lat(l)*pi/180).^2) - eps*sin(lat(l)*pi/180)- delv*log(sigma(k)).*(cos(lat(l)*pi/180).^2)).*(sigma(k)^kap));
         end
     end
 end
@@ -144,7 +144,7 @@ for d=1:t_length
         III=find(pres <= p_bdin(j,d));
         TePV(j,III,d) = Te0(j,III,d);
     end
-    
+
 end
 
 
@@ -173,13 +173,13 @@ if ( exist('filename','var'))
     phalf = zeros(length(pres)+1,1);
     phalf(2:end-1) = pres(2:end) - diff(pres)/2;
     phalf(end) = 1e3;
-    
-    
+
+
     Te = zeros(length(lon),length(lat),length(pres),length(days));
     for l=1:length(lon)
         Te(l,:,:,:)=TePV;
     end
-    
+
     ncid = netcdf.create(filename,'64BIT_OFFSET');
     % define dimensions and variables
     lond_id = netcdf.defDim(ncid,'lon',length(lon));
@@ -189,7 +189,7 @@ if ( exist('filename','var'))
     pd_id   = netcdf.defDim(ncid,'pfull',length(pres'));
     phd_id  = netcdf.defDim(ncid,'phalf',length(phalf));
     td_id  =  netcdf.defDim(ncid,'time',netcdf.getConstant('NC_UNLIMITED'));
-    
+
     lon_id  = netcdf.defVar(ncid,'lon','double',lond_id);
     netcdf.putAtt(ncid,lon_id,'long_name','longitude');
     netcdf.putAtt(ncid,lon_id,'units','degrees_E');
@@ -224,14 +224,14 @@ if ( exist('filename','var'))
     netcdf.putAtt(ncid,t_id,'units','days since 0000-00-00 00:00:00');
     %netcdf.putAtt(ncid,t_id,'calendar_type','NO_CALENDAR'); %THIRTY_DAY_MONTHS %THIRTY_DAY_MONTHS
     %netcdf.putAtt(ncid,t_id,'calendar','NO_CALENDAR'); %writetempin_time.m
-    
+
     T_id  = netcdf.defVar(ncid,'temp','double',[lond_id,latd_id,pd_id,td_id]);
     netcdf.putAtt(ncid,T_id,'long_name','radiative relaxation temperature');
     netcdf.putAtt(ncid,T_id,'units','deg_K');
     netcdf.putAtt(ncid,T_id,'valid_range',[0,500]);
     netcdf.putAtt(ncid,T_id,'missing_value',-1.e+10);
-    
-    
+
+
     netcdf.endDef(ncid);
     % write fields
     netcdf.putVar(ncid,lon_id,lon);
@@ -242,10 +242,9 @@ if ( exist('filename','var'))
     netcdf.putVar(ncid,ph_id,phalf);
     netcdf.putVar(ncid,t_id,0,length(days),days);
     netcdf.putVar(ncid,T_id,[0,0,0,0],[size(Te,1),size(Te,2),size(Te,3),size(Te,4)],Te);
-    
-    
-    netcdf.close(ncid)
-    
-end
-end
 
+
+    netcdf.close(ncid)
+
+end
+end
