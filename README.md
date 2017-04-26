@@ -7,7 +7,7 @@ Realistic stratospheric Newtonian cooling setup in Held-Suarez-like General Circ
 
 and the analytical approximation described in 
 
-[M Jucker, S Fueglistaler, and GK Vallis (2014): Stratospheric sudden warmings in an idealized GCM, J. Geophys. Res., DOI: 10.1002/2014JD022170] (http://dx.doi.org/10.1002/2014JD022170)
+[M Jucker, S Fueglistaler, and GK Vallis (2014): Stratospheric sudden warmings in an idealized GCM, J. Geophys. Res., DOI: 10.1002/2014JD022170](http://dx.doi.org/10.1002/2014JD022170)
 
 This model is based on the Geophyiscal Fluid Dynamics Laboratory's (GFDL) AM2 code. For online documentation, see
 [GFDL's AM2 documentation website](http://data1.gfdl.noaa.gov/~arl/pubrel/m/am2/doc/), and for references, see
