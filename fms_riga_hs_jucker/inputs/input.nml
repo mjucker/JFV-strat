@@ -16,11 +16,9 @@
 
  &hs_forcing_nml
     no_forcing = .false.,
-    trsink=0.,
-    surface_forcing_input = .false.,
     do_conserve_energy    =  .true.,
-    equilibrium_tau_option = 'from_file',
-    equilibrium_t_option = 'from_file',
+    equilibrium_tau_option = 'JFV',
+    equilibrium_t_option = 'JFV',
     pv_sat_flag   =  .false.,
     sat_only_flag =  .false.,
     pv_gamma = 4.e-3
@@ -33,7 +31,7 @@
 /
 
  &main_nml
-         days   = 200,
+         days   = 365,
          dt_atmos = 800
 /
 
