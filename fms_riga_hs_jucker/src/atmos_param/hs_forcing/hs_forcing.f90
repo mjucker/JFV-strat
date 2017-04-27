@@ -98,12 +98,12 @@ private
    logical :: pv_sat_flag   = .true.  ! flag for SAT strat + polar vortex
    logical :: sat_only_flag = .false. ! mj flag for SAT strat without  polar vortex
    real :: pv_phi0  = 60.    !  polar vortex edge location (in degrees)
-   real :: pv_dphi  = 10.    !  polar vortex edge width (in degrees)
-   real :: pv_gamma = -1.e-3 !  polar vortex lapse rate (in degK/m)
+   real :: pv_dphi  =-10.    !  polar vortex edge width (in degrees)
+   real :: pv_gamma = 4.e-3 !  polar vortex lapse rate (in degK/m)
 !
    logical :: sponge_flag = .true. !flag for sponge at top of model
-   real :: sponge_pbottom = 1.e2    !bottom of sponge layer, where damping is zero (Pa)
-   real :: sponge_tau_days  = 1.0   !damping time scale for the sponge (days)
+   real :: sponge_pbottom = 5.e1    !bottom of sponge layer, where damping is zero (Pa)
+   real :: sponge_tau_days  = 0.5   !damping time scale for the sponge (days)
 
    real :: p_tropopause = 0.1       !tropopause pressure divided by reference pressure
 
