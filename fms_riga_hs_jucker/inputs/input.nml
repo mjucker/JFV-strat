@@ -29,9 +29,7 @@
     sc_flag = .false.,
     sponge_flag	=  .true.,
     sponge_pbottom = 5.e1,
-    sponge_tau_days = 0.5,
-    sponge_eddies = .false.,
-    sponge_eddies_days = 0.5
+    sponge_tau_days = 0.5
 /
 
  &main_nml
