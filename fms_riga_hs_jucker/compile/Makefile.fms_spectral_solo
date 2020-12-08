@@ -1,6 +1,7 @@
 # Makefile created by mkmf $Id: mkmf,v 18.0 2010/03/02 23:26:08 fms Exp $ 
 
 SRCROOT = /PATH/TO/src/
+SRCROOT = /g/data/w40/mxj563/software/Repositories/JFV-strat/fms_riga_hs_jucker/src/
 
 CPPDEFS = -Duse_libMPI -Duse_netCDF -DINTERNAL_FILE_NML -DOVERLOAD_C8
 

@@ -21,8 +21,8 @@ OPENMP =
 # often, there's a pre-defined library and include variable
 # we call them MPI_LIB and MPI_INC here
 # otherwise, try the mpif90 command, but that doesn't always work
-LIB_MPI := -L$(MPI_LIB) $(shell mpif90 -showme:link)
-INC_MPI := -I$(MPI_INC) $(shell mpif90 -showme:compiler)
+LIB_MPI := -L$(OMPI_F90LIBS) $(shell mpif90 -showme:link)
+INC_MPI := -I$(FPATH) $(shell mpif90 -showme:compiler)
 
 INC_NETCDF := $(shell nc-config --fflags)
 LIB_NETCDF := $(shell nc-config --flibs)
